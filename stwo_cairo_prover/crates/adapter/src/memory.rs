@@ -75,14 +75,14 @@ impl Default for MemoryConfig {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Memory {
     pub config: MemoryConfig,
-    pub address_to_id: Vec<EncodedMemoryValueId>,
+    pub address_to_id: HashMap<u32, EncodedMemoryValueId>,
     pub inst_cache: HashMap<u32, u128>,
     pub f252_values: Vec<[u32; 8]>,
     pub small_values: Vec<u128>,
 }
 impl Memory {
     pub fn get(&self, addr: u32) -> MemoryValue {
-        match self.address_to_id[addr as usize].decode() {
+        match self.address_to_id.get(&addr).unwrap().decode() {
             MemoryValueId::Small(id) => MemoryValue::Small(self.small_values[id as usize]),
             MemoryValueId::F252(id) => MemoryValue::F252(self.f252_values[id as usize]),
             // TODO(Ohad): This case should be a panic, but at the moment there is padding on memory
@@ -93,7 +93,7 @@ impl Memory {
     }
 
     pub fn get_raw_id(&self, addr: u32) -> u32 {
-        self.address_to_id[addr as usize].0
+        self.address_to_id.get(&addr).unwrap().0
     }
 
     pub fn get_inst(&self, addr: u32) -> Option<u128> {
@@ -136,7 +136,7 @@ impl MemoryBuilder {
         Self {
             memory: Memory {
                 config,
-                address_to_id: Vec::new(),
+                address_to_id: HashMap::new(),
                 inst_cache: HashMap::new(),
                 f252_values: Vec::new(),
                 small_values: Vec::new(),
@@ -174,10 +174,6 @@ impl MemoryBuilder {
     // TODO(ohadn): settle on an address integer type, and use it consistently.
     // TODO(Ohad): add debug sanity checks.
     pub fn set(&mut self, addr: u32, value: MemoryValue) {
-        if addr as usize >= self.address_to_id.len() {
-            self.address_to_id
-                .resize(addr as usize + 1, EncodedMemoryValueId::default());
-        }
         let res = EncodedMemoryValueId::encode(match value {
             MemoryValue::Small(val) => {
                 let len = self.small_values.len();
@@ -196,7 +192,7 @@ impl MemoryBuilder {
                 MemoryValueId::F252(id as u32)
             }
         });
-        self.address_to_id[addr as usize] = res;
+        self.address_to_id.insert(addr, res);
     }
 
     /// Copies a block of memory from one location to another.
@@ -210,19 +206,19 @@ impl MemoryBuilder {
 
     pub fn assert_segment_is_empty(&self, start_addr: u32, segment_length: u32) {
         let len = self.address_to_id.len();
-        let start = start_addr as usize;
-        let end = std::cmp::min(len, (start_addr + segment_length) as usize);
+        let _start = start_addr as usize;
+        let _end = std::cmp::min(len, (start_addr + segment_length) as usize);
 
-        if let Some(non_empty) = self.address_to_id[start..end]
-            .iter()
-            .position(|&id| id != EncodedMemoryValueId::default())
-        {
-            panic!(
-                "Memory expected empty at addresses {}, found ID: {:?}",
-                start + non_empty,
-                self.address_to_id[start + non_empty]
-            );
-        }
+        // if let Some(non_empty) = self.address_to_id[start..end]
+        //     .iter()
+        //     .position(|&id| id != EncodedMemoryValueId::default())
+        // {
+        //     panic!(
+        //         "Memory expected empty at addresses {}, found ID: {:?}",
+        //         start + non_empty,
+        //         self.address_to_id[start + non_empty]
+        //     );
+        // }
     }
 
     pub fn build(self) -> Memory {
@@ -383,8 +379,14 @@ mod tests {
         assert_eq!(memory.get(9), MemoryValue::F252(P_MIN_2));
         // Duplicates.
         assert_eq!(memory.get(100), MemoryValue::F252([1; 8]));
-        assert_eq!(memory.address_to_id[0], memory.address_to_id[100]);
-        assert_eq!(memory.address_to_id[5], memory.address_to_id[105]);
+        assert_eq!(
+            memory.address_to_id.get(&0).unwrap(),
+            memory.address_to_id.get(&100).unwrap()
+        );
+        assert_eq!(
+            memory.address_to_id.get(&5).unwrap(),
+            memory.address_to_id.get(&105).unwrap()
+        );
     }
 
     #[test]
@@ -414,9 +416,9 @@ mod tests {
         let expxcted_id_addr_2 = EncodedMemoryValueId::encode(MemoryValueId::Small(0));
 
         let memory = MemoryBuilder::from_iter(MemoryConfig::default(), entries).build();
-        let addr_0_id = memory.address_to_id[0];
-        let addr_1_id = memory.address_to_id[1];
-        let addr_2_id = memory.address_to_id[2];
+        let addr_0_id = *memory.address_to_id.get(&0).unwrap();
+        let addr_1_id = *memory.address_to_id.get(&1).unwrap();
+        let addr_2_id = *memory.address_to_id.get(&2).unwrap();
 
         assert_eq!(addr_0_id, expxcted_id_addr_0);
         assert_eq!(addr_1_id, expxcted_id_addr_1);

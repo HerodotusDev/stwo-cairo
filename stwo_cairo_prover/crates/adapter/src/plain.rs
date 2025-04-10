@@ -118,7 +118,10 @@ pub fn adapt_finished_runner(runner: CairoRunner) -> Result<ProverInput, VmImpor
 /// input to the adapter.
 /// When dev mod is enabled, the opcodes generated from the plain casm will be mapped to the generic
 /// component only.
-pub fn adapt_finished_runner_shards(runner: CairoRunner, shard_size: usize) -> Result<Vec<ProverInput>, VmImportError> {
+pub fn adapt_finished_runner_shards(
+    runner: CairoRunner,
+    shard_size: usize,
+) -> Result<Vec<ProverInput>, VmImportError> {
     let _span = tracing::info_span!("adapt_finished_runner").entered();
     let memory_iter = runner
         .relocated_memory
