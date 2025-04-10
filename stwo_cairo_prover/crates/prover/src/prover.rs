@@ -164,7 +164,7 @@ pub fn default_prod_prover_parameters() -> ProverParameters {
         channel_hash: ChannelHash::Blake2s,
         pcs_config: PcsConfig {
             // Stay within 500ms on M3.
-            pow_bits: 26,
+            pow_bits: 5,
             fri_config: FriConfig {
                 log_last_layer_degree_bound: 0,
                 // Blowup factor > 1 significantly degrades proving speed.
@@ -172,7 +172,7 @@ pub fn default_prod_prover_parameters() -> ProverParameters {
                 log_blowup_factor: 1,
                 // The more FRI queries, the larger the proof.
                 // Proving time is not affected much by increasing this value.
-                n_queries: 70,
+                n_queries: 1,
             },
         },
         preprocessed_trace: PreProcessedTraceVariant::Canonical,

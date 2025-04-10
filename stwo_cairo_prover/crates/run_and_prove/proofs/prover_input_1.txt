@@ -1,0 +1,173 @@
+ProverInput {
+    state_transitions: StateTransitions {
+        initial_state: CasmState {
+            pc: M31(
+                9,
+            ),
+            ap: M31(
+                18,
+            ),
+            fp: M31(
+                13,
+            ),
+        },
+        final_state: CasmState {
+            pc: M31(
+                10,
+            ),
+            ap: M31(
+                19,
+            ),
+            fp: M31(
+                13,
+            ),
+        },
+        casm_states_by_opcode: CasmStatesByOpcode {
+            generic_opcode: [],
+            add_ap_opcode: [],
+            add_ap_opcode_imm: [],
+            add_ap_opcode_op_1_base_fp: [],
+            add_opcode_small_imm: [],
+            add_opcode: [],
+            add_opcode_small: [],
+            add_opcode_imm: [],
+            assert_eq_opcode: [],
+            assert_eq_opcode_double_deref: [],
+            assert_eq_opcode_imm: [],
+            call_opcode: [],
+            call_opcode_rel: [],
+            call_opcode_op_1_base_fp: [],
+            jnz_opcode_taken_dst_base_fp: [],
+            jnz_opcode: [],
+            jnz_opcode_taken: [],
+            jnz_opcode_dst_base_fp: [],
+            jump_opcode_rel_imm: [],
+            jump_opcode_rel: [],
+            jump_opcode_double_deref: [],
+            jump_opcode: [],
+            mul_opcode_small_imm: [],
+            mul_opcode_small: [
+                CasmState {
+                    pc: M31(
+                        9,
+                    ),
+                    ap: M31(
+                        18,
+                    ),
+                    fp: M31(
+                        13,
+                    ),
+                },
+            ],
+            mul_opcode: [],
+            mul_opcode_imm: [],
+            ret_opcode: [],
+            blake2s_opcode: [],
+            qm31_add_mul_opcode: [],
+        },
+    },
+    instruction_by_pc: {
+        M31(
+            9,
+        ): 5210805504208502784,
+    },
+    memory: Memory {
+        config: MemoryConfig {
+            small_max: 4722366482869645213695,
+        },
+        address_to_id: [
+            EncodedMemoryValueId(
+                1073741823,
+            ),
+            EncodedMemoryValueId(
+                0,
+            ),
+            EncodedMemoryValueId(
+                1,
+            ),
+            EncodedMemoryValueId(
+                0,
+            ),
+            EncodedMemoryValueId(
+                2,
+            ),
+            EncodedMemoryValueId(
+                0,
+            ),
+            EncodedMemoryValueId(
+                3,
+            ),
+            EncodedMemoryValueId(
+                4,
+            ),
+            EncodedMemoryValueId(
+                5,
+            ),
+            EncodedMemoryValueId(
+                6,
+            ),
+            EncodedMemoryValueId(
+                7,
+            ),
+            EncodedMemoryValueId(
+                8,
+            ),
+            EncodedMemoryValueId(
+                8,
+            ),
+            EncodedMemoryValueId(
+                1,
+            ),
+            EncodedMemoryValueId(
+                2,
+            ),
+            EncodedMemoryValueId(
+                3,
+            ),
+            EncodedMemoryValueId(
+                9,
+            ),
+            EncodedMemoryValueId(
+                10,
+            ),
+            EncodedMemoryValueId(
+                11,
+            ),
+        ],
+        inst_cache: {
+            7: 5210805504208437248,
+            1: 5189976364521848832,
+            3: 5189976364521848832,
+            9: 5210805504208502784,
+            5: 5189976364521848832,
+        },
+        f252_values: [],
+        small_values: [
+            5189976364521848832,
+            1,
+            2,
+            3,
+            5210805504208437248,
+            5201798304953565184,
+            5210805504208502784,
+            2345108766317314046,
+            19,
+            6,
+            7,
+            49,
+        ],
+    },
+    public_memory_addresses: [],
+    builtins_segments: BuiltinSegments {
+        add_mod: None,
+        bitwise: None,
+        ec_op: None,
+        ecdsa: None,
+        keccak: None,
+        mul_mod: None,
+        pedersen: None,
+        poseidon: None,
+        range_check_bits_96: None,
+        range_check_bits_128: None,
+    },
+}

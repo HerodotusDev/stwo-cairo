@@ -7,6 +7,7 @@ use std::path::Path;
 use bytemuck::{bytes_of_mut, Pod, Zeroable};
 use cairo_vm::air_public_input::{MemorySegmentAddresses, PublicInput, PublicInputError};
 use cairo_vm::stdlib::collections::HashMap;
+use itertools::IntoChunks;
 use json::PrivateInput;
 use stwo_cairo_common::memory::MEMORY_ADDRESS_BOUND;
 use thiserror::Error;
@@ -145,6 +146,38 @@ pub fn adapt_to_stwo_input(
         public_memory_addresses,
         builtins_segments,
     })
+}
+
+/// Creates continuations Cairo input for Stwo, utilized by:
+/// - `adapt_vm_output` in the prover.
+/// - `adapt_finished_runner` in the validator.
+pub fn adapt_to_stwo_input_chunks(
+    trace_chunks_iter: IntoChunks<impl Iterator<Item = RelocatedTraceEntry>>,
+    mut memory: MemoryBuilder,
+    public_memory_addresses: Vec<u32>,
+    _memory_segments: &HashMap<&str, MemorySegmentAddresses>,
+) -> Result<Vec<ProverInput>, VmImportError> {
+    // let mut builtins_segments = BuiltinSegments::from_memory_segments(memory_segments);
+    // builtins_segments.fill_memory_holes(&mut memory);
+    // builtins_segments.pad_builtin_segments(&mut memory);
+
+    let transitions = trace_chunks_iter
+        .into_iter()
+        .map(|chunk| StateTransitions::from_iter(chunk, &mut memory))
+        .collect::<Vec<_>>();
+
+    let memory = memory.build();
+
+    Ok(transitions
+        .into_iter()
+        .map(|(state_transitions, instruction_by_pc)| ProverInput {
+            state_transitions,
+            instruction_by_pc,
+            memory: memory.to_owned(),
+            public_memory_addresses: public_memory_addresses.to_owned(),
+            builtins_segments: BuiltinSegments::default(),
+        })
+        .collect())
 }
 
 /// A single entry from the trace file.

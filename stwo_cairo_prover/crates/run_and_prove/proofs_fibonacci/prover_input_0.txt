@@ -1,0 +1,796 @@
+ProverInput {
+    state_transitions: StateTransitions {
+        initial_state: CasmState {
+            pc: M31(
+                1,
+            ),
+            ap: M31(
+                27,
+            ),
+            fp: M31(
+                27,
+            ),
+        },
+        final_state: CasmState {
+            pc: M31(
+                17,
+            ),
+            ap: M31(
+                56,
+            ),
+            fp: M31(
+                56,
+            ),
+        },
+        casm_states_by_opcode: CasmStatesByOpcode {
+            generic_opcode: [],
+            add_ap_opcode: [],
+            add_ap_opcode_imm: [],
+            add_ap_opcode_op_1_base_fp: [],
+            add_opcode_small_imm: [],
+            add_opcode: [],
+            add_opcode_small: [
+                CasmState {
+                    pc: M31(
+                        17,
+                    ),
+                    ap: M31(
+                        32,
+                    ),
+                    fp: M31(
+                        32,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        17,
+                    ),
+                    ap: M31(
+                        38,
+                    ),
+                    fp: M31(
+                        38,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        17,
+                    ),
+                    ap: M31(
+                        44,
+                    ),
+                    fp: M31(
+                        44,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        17,
+                    ),
+                    ap: M31(
+                        50,
+                    ),
+                    fp: M31(
+                        50,
+                    ),
+                },
+            ],
+            add_opcode_imm: [
+                CasmState {
+                    pc: M31(
+                        20,
+                    ),
+                    ap: M31(
+                        35,
+                    ),
+                    fp: M31(
+                        32,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        20,
+                    ),
+                    ap: M31(
+                        41,
+                    ),
+                    fp: M31(
+                        38,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        20,
+                    ),
+                    ap: M31(
+                        47,
+                    ),
+                    fp: M31(
+                        44,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        20,
+                    ),
+                    ap: M31(
+                        53,
+                    ),
+                    fp: M31(
+                        50,
+                    ),
+                },
+            ],
+            assert_eq_opcode: [
+                CasmState {
+                    pc: M31(
+                        18,
+                    ),
+                    ap: M31(
+                        33,
+                    ),
+                    fp: M31(
+                        32,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        19,
+                    ),
+                    ap: M31(
+                        34,
+                    ),
+                    fp: M31(
+                        32,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        18,
+                    ),
+                    ap: M31(
+                        39,
+                    ),
+                    fp: M31(
+                        38,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        19,
+                    ),
+                    ap: M31(
+                        40,
+                    ),
+                    fp: M31(
+                        38,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        18,
+                    ),
+                    ap: M31(
+                        45,
+                    ),
+                    fp: M31(
+                        44,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        19,
+                    ),
+                    ap: M31(
+                        46,
+                    ),
+                    fp: M31(
+                        44,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        18,
+                    ),
+                    ap: M31(
+                        51,
+                    ),
+                    fp: M31(
+                        50,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        19,
+                    ),
+                    ap: M31(
+                        52,
+                    ),
+                    fp: M31(
+                        50,
+                    ),
+                },
+            ],
+            assert_eq_opcode_double_deref: [],
+            assert_eq_opcode_imm: [
+                CasmState {
+                    pc: M31(
+                        1,
+                    ),
+                    ap: M31(
+                        27,
+                    ),
+                    fp: M31(
+                        27,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        3,
+                    ),
+                    ap: M31(
+                        28,
+                    ),
+                    fp: M31(
+                        27,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        5,
+                    ),
+                    ap: M31(
+                        29,
+                    ),
+                    fp: M31(
+                        27,
+                    ),
+                },
+            ],
+            call_opcode: [],
+            call_opcode_rel: [
+                CasmState {
+                    pc: M31(
+                        7,
+                    ),
+                    ap: M31(
+                        30,
+                    ),
+                    fp: M31(
+                        27,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        22,
+                    ),
+                    ap: M31(
+                        36,
+                    ),
+                    fp: M31(
+                        32,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        22,
+                    ),
+                    ap: M31(
+                        42,
+                    ),
+                    fp: M31(
+                        38,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        22,
+                    ),
+                    ap: M31(
+                        48,
+                    ),
+                    fp: M31(
+                        44,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        22,
+                    ),
+                    ap: M31(
+                        54,
+                    ),
+                    fp: M31(
+                        50,
+                    ),
+                },
+            ],
+            call_opcode_op_1_base_fp: [],
+            jnz_opcode_taken_dst_base_fp: [
+                CasmState {
+                    pc: M31(
+                        12,
+                    ),
+                    ap: M31(
+                        32,
+                    ),
+                    fp: M31(
+                        32,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        12,
+                    ),
+                    ap: M31(
+                        38,
+                    ),
+                    fp: M31(
+                        38,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        12,
+                    ),
+                    ap: M31(
+                        44,
+                    ),
+                    fp: M31(
+                        44,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        12,
+                    ),
+                    ap: M31(
+                        50,
+                    ),
+                    fp: M31(
+                        50,
+                    ),
+                },
+                CasmState {
+                    pc: M31(
+                        12,
+                    ),
+                    ap: M31(
+                        56,
+                    ),
+                    fp: M31(
+                        56,
+                    ),
+                },
+            ],
+            jnz_opcode: [],
+            jnz_opcode_taken: [],
+            jnz_opcode_dst_base_fp: [],
+            jump_opcode_rel_imm: [],
+            jump_opcode_rel: [],
+            jump_opcode_double_deref: [],
+            jump_opcode: [],
+            mul_opcode_small_imm: [],
+            mul_opcode_small: [],
+            mul_opcode: [],
+            mul_opcode_imm: [],
+            ret_opcode: [],
+            blake2s_opcode: [],
+            qm31_add_mul_opcode: [],
+        },
+    },
+    instruction_by_pc: {
+        M31(
+            18,
+        ): 5191102242953854976,
+        M31(
+            5,
+        ): 5189976364521848832,
+        M31(
+            7,
+        ): 1226245742482522112,
+        M31(
+            22,
+        ): 1226245742482522112,
+        M31(
+            12,
+        ): 146226256843603965,
+        M31(
+            3,
+        ): 5189976364521848832,
+        M31(
+            17,
+        ): 5200109442208333824,
+        M31(
+            19,
+        ): 5193354051357474816,
+        M31(
+            1,
+        ): 5189976364521848832,
+        M31(
+            20,
+        ): 5198983563776458752,
+    },
+    memory: Memory {
+        config: MemoryConfig {
+            small_max: 4722366482869645213695,
+        },
+        address_to_id: [
+            EncodedMemoryValueId(
+                1073741823,
+            ),
+            EncodedMemoryValueId(
+                0,
+            ),
+            EncodedMemoryValueId(
+                1,
+            ),
+            EncodedMemoryValueId(
+                0,
+            ),
+            EncodedMemoryValueId(
+                1,
+            ),
+            EncodedMemoryValueId(
+                0,
+            ),
+            EncodedMemoryValueId(
+                2,
+            ),
+            EncodedMemoryValueId(
+                3,
+            ),
+            EncodedMemoryValueId(
+                4,
+            ),
+            EncodedMemoryValueId(
+                5,
+            ),
+            EncodedMemoryValueId(
+                6,
+            ),
+            EncodedMemoryValueId(
+                7,
+            ),
+            EncodedMemoryValueId(
+                8,
+            ),
+            EncodedMemoryValueId(
+                4,
+            ),
+            EncodedMemoryValueId(
+                9,
+            ),
+            EncodedMemoryValueId(
+                9,
+            ),
+            EncodedMemoryValueId(
+                7,
+            ),
+            EncodedMemoryValueId(
+                10,
+            ),
+            EncodedMemoryValueId(
+                9,
+            ),
+            EncodedMemoryValueId(
+                11,
+            ),
+            EncodedMemoryValueId(
+                12,
+            ),
+            EncodedMemoryValueId(
+                1073741824,
+            ),
+            EncodedMemoryValueId(
+                3,
+            ),
+            EncodedMemoryValueId(
+                1073741825,
+            ),
+            EncodedMemoryValueId(
+                7,
+            ),
+            EncodedMemoryValueId(
+                13,
+            ),
+            EncodedMemoryValueId(
+                13,
+            ),
+            EncodedMemoryValueId(
+                1,
+            ),
+            EncodedMemoryValueId(
+                1,
+            ),
+            EncodedMemoryValueId(
+                2,
+            ),
+            EncodedMemoryValueId(
+                14,
+            ),
+            EncodedMemoryValueId(
+                15,
+            ),
+            EncodedMemoryValueId(
+                16,
+            ),
+            EncodedMemoryValueId(
+                1,
+            ),
+            EncodedMemoryValueId(
+                16,
+            ),
+            EncodedMemoryValueId(
+                15,
+            ),
+            EncodedMemoryValueId(
+                17,
+            ),
+            EncodedMemoryValueId(
+                18,
+            ),
+            EncodedMemoryValueId(
+                19,
+            ),
+            EncodedMemoryValueId(
+                16,
+            ),
+            EncodedMemoryValueId(
+                19,
+            ),
+            EncodedMemoryValueId(
+                20,
+            ),
+            EncodedMemoryValueId(
+                21,
+            ),
+            EncodedMemoryValueId(
+                18,
+            ),
+            EncodedMemoryValueId(
+                4,
+            ),
+            EncodedMemoryValueId(
+                19,
+            ),
+            EncodedMemoryValueId(
+                4,
+            ),
+            EncodedMemoryValueId(
+                22,
+            ),
+            EncodedMemoryValueId(
+                23,
+            ),
+            EncodedMemoryValueId(
+                18,
+            ),
+            EncodedMemoryValueId(
+                20,
+            ),
+            EncodedMemoryValueId(
+                4,
+            ),
+            EncodedMemoryValueId(
+                20,
+            ),
+            EncodedMemoryValueId(
+                24,
+            ),
+            EncodedMemoryValueId(
+                25,
+            ),
+            EncodedMemoryValueId(
+                18,
+            ),
+            EncodedMemoryValueId(
+                26,
+            ),
+            EncodedMemoryValueId(
+                20,
+            ),
+            EncodedMemoryValueId(
+                26,
+            ),
+            EncodedMemoryValueId(
+                4,
+            ),
+            EncodedMemoryValueId(
+                27,
+            ),
+            EncodedMemoryValueId(
+                18,
+            ),
+            EncodedMemoryValueId(
+                28,
+            ),
+            EncodedMemoryValueId(
+                26,
+            ),
+            EncodedMemoryValueId(
+                28,
+            ),
+            EncodedMemoryValueId(
+                29,
+            ),
+            EncodedMemoryValueId(
+                30,
+            ),
+            EncodedMemoryValueId(
+                18,
+            ),
+            EncodedMemoryValueId(
+                31,
+            ),
+            EncodedMemoryValueId(
+                28,
+            ),
+            EncodedMemoryValueId(
+                31,
+            ),
+            EncodedMemoryValueId(
+                19,
+            ),
+            EncodedMemoryValueId(
+                32,
+            ),
+            EncodedMemoryValueId(
+                18,
+            ),
+            EncodedMemoryValueId(
+                33,
+            ),
+            EncodedMemoryValueId(
+                31,
+            ),
+            EncodedMemoryValueId(
+                33,
+            ),
+            EncodedMemoryValueId(
+                16,
+            ),
+            EncodedMemoryValueId(
+                34,
+            ),
+            EncodedMemoryValueId(
+                18,
+            ),
+            EncodedMemoryValueId(
+                35,
+            ),
+            EncodedMemoryValueId(
+                33,
+            ),
+            EncodedMemoryValueId(
+                35,
+            ),
+            EncodedMemoryValueId(
+                1,
+            ),
+            EncodedMemoryValueId(
+                36,
+            ),
+            EncodedMemoryValueId(
+                18,
+            ),
+            EncodedMemoryValueId(
+                6,
+            ),
+            EncodedMemoryValueId(
+                35,
+            ),
+            EncodedMemoryValueId(
+                6,
+            ),
+            EncodedMemoryValueId(
+                37,
+            ),
+            EncodedMemoryValueId(
+                38,
+            ),
+            EncodedMemoryValueId(
+                18,
+            ),
+            EncodedMemoryValueId(
+                6,
+            ),
+            EncodedMemoryValueId(
+                6,
+            ),
+        ],
+        inst_cache: {
+            24: 2345108766317314046,
+            3: 5189976364521848832,
+            16: 2345108766317314046,
+            20: 5198983563776458752,
+            5: 5189976364521848832,
+            14: 5191102242953854976,
+            1: 5189976364521848832,
+            9: 4613515612218425343,
+            19: 5193354051357474816,
+            12: 146226256843603965,
+            7: 1226245742482522112,
+            22: 1226245742482522112,
+            15: 5191102242953854976,
+            18: 5191102242953854976,
+            17: 5200109442208333824,
+        },
+        f252_values: [
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                17,
+                134217728,
+            ],
+            [
+                4294967287,
+                4294967295,
+                4294967295,
+                4294967295,
+                4294967295,
+                4294967295,
+                16,
+                134217728,
+            ],
+        ],
+        small_values: [
+            5189976364521848832,
+            1,
+            10,
+            1226245742482522112,
+            5,
+            4613515612218425343,
+            144,
+            2345108766317314046,
+            146226256843603965,
+            5191102242953854976,
+            5200109442208333824,
+            5193354051357474816,
+            5198983563776458752,
+            94,
+            27,
+            9,
+            2,
+            32,
+            24,
+            3,
+            8,
+            38,
+            7,
+            44,
+            6,
+            50,
+            13,
+            56,
+            21,
+            4,
+            62,
+            34,
+            68,
+            55,
+            74,
+            89,
+            80,
+            0,
+            86,
+        ],
+    },
+    public_memory_addresses: [],
+    builtins_segments: BuiltinSegments {
+        add_mod: None,
+        bitwise: None,
+        ec_op: None,
+        ecdsa: None,
+        keccak: None,
+        mul_mod: None,
+        pedersen: None,
+        poseidon: None,
+        range_check_bits_96: None,
+        range_check_bits_128: None,
+    },
+}

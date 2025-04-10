@@ -9,6 +9,7 @@ use super::memory::{MemoryBuilder, MemoryConfig};
 use super::vm_import::{adapt_to_stwo_input, VmImportError};
 use super::ProverInput;
 use crate::memory::MemoryEntry;
+use crate::vm_import::adapt_to_stwo_input_chunks;
 
 /// Translates a plain casm into a ProverInput by running the program and extracting the memory and
 /// the state transitions.
@@ -107,6 +108,47 @@ pub fn adapt_finished_runner(runner: CairoRunner) -> Result<ProverInput, VmImpor
     // TODO(spapini): Add output builtin to public memory.
     adapt_to_stwo_input(
         trace_iter,
+        MemoryBuilder::from_iter(MemoryConfig::default(), memory_iter),
+        public_memory_addresses,
+        memory_segments,
+    )
+}
+
+/// Translates a CairoRunner that finished its run into a ProverInputs by extracting the relevant
+/// input to the adapter.
+/// When dev mod is enabled, the opcodes generated from the plain casm will be mapped to the generic
+/// component only.
+pub fn adapt_finished_runner_shards(runner: CairoRunner, shard_size: usize) -> Result<Vec<ProverInput>, VmImportError> {
+    let _span = tracing::info_span!("adapt_finished_runner").entered();
+    let memory_iter = runner
+        .relocated_memory
+        .iter()
+        .enumerate()
+        .filter_map(|(i, v)| {
+            v.map(|v| MemoryEntry {
+                address: i as u64,
+                value: bytemuck::cast(v.to_bytes_le()),
+            })
+        });
+
+    let public_input = runner.get_air_public_input()?;
+
+    let trace_iter = match runner.relocated_trace {
+        Some(ref trace) => trace.iter().map(|t| t.clone().into()),
+        None => return Err(VmImportError::TraceNotRelocated),
+    };
+
+    let memory_segments = &public_input.memory_segments;
+
+    let public_memory_addresses = public_input
+        .public_memory
+        .iter()
+        .map(|s| s.address as u32)
+        .collect_vec();
+
+    // TODO(spapini): Add output builtin to public memory.
+    adapt_to_stwo_input_chunks(
+        trace_iter.chunks(shard_size),
         MemoryBuilder::from_iter(MemoryConfig::default(), memory_iter),
         public_memory_addresses,
         memory_segments,

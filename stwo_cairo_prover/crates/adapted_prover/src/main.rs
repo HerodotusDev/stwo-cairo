@@ -37,58 +37,28 @@ fn main() -> ExitCode {
 }
 
 fn run(_args: impl Iterator<Item = String>) -> Result<(), Error> {
-    let prover_input: ProverInput = ProverInput {
+    let prover_input = ProverInput {
         state_transitions: StateTransitions {
             initial_state: CasmState {
-                pc: M31(1),
-                ap: M31(12),
-                fp: M31(12),
+                pc: M31(9),
+                ap: M31(18),
+                fp: M31(13),
             },
             final_state: CasmState {
-                pc: M31(9),
-                ap: M31(17),
-                fp: M31(12),
+                pc: M31(10),
+                ap: M31(19),
+                fp: M31(13),
             },
             casm_states_by_opcode: CasmStatesByOpcode {
-                add_opcode_small: vec![CasmState {
-                    pc: M31(8),
-                    ap: M31(16),
-                    fp: M31(12),
-                }],
-                assert_eq_opcode_imm: vec![
-                    CasmState {
-                        pc: M31(1),
-                        ap: M31(12),
-                        fp: M31(12),
-                    },
-                    CasmState {
-                        pc: M31(3),
-                        ap: M31(13),
-                        fp: M31(12),
-                    },
-                    CasmState {
-                        pc: M31(5),
-                        ap: M31(14),
-                        fp: M31(12),
-                    },
-                ],
                 mul_opcode_small: vec![CasmState {
-                    pc: M31(7),
-                    ap: M31(15),
-                    fp: M31(12),
+                    pc: M31(9),
+                    ap: M31(18),
+                    fp: M31(13),
                 }],
                 ..Default::default()
             },
         },
-        instruction_by_pc: [
-            (M31(5), 5189976364521848832),
-            (M31(8), 5201798304953565184),
-            (M31(7), 5210805504208437248),
-            (M31(1), 5189976364521848832),
-            (M31(3), 5189976364521848832),
-        ]
-        .into_iter()
-        .collect(),
+        instruction_by_pc: [(M31(9), 5210805504208502784)].into_iter().collect(),
         memory: Memory {
             config: MemoryConfig {
                 small_max: 4722366482869645213695,
@@ -96,47 +66,58 @@ fn run(_args: impl Iterator<Item = String>) -> Result<(), Error> {
             address_to_id: vec![
                 EncodedMemoryValueId(1073741823),
                 EncodedMemoryValueId(0),
-                EncodedMemoryValueId(1),
                 EncodedMemoryValueId(0),
-                EncodedMemoryValueId(2),
                 EncodedMemoryValueId(0),
-                EncodedMemoryValueId(3),
-                EncodedMemoryValueId(4),
-                EncodedMemoryValueId(5),
+                EncodedMemoryValueId(0),
+                EncodedMemoryValueId(0),
+                EncodedMemoryValueId(0),
+                EncodedMemoryValueId(0),
+                EncodedMemoryValueId(0),
                 EncodedMemoryValueId(6),
                 EncodedMemoryValueId(7),
-                EncodedMemoryValueId(7),
-                EncodedMemoryValueId(1),
-                EncodedMemoryValueId(2),
-                EncodedMemoryValueId(3),
-                EncodedMemoryValueId(8),
-                EncodedMemoryValueId(9),
+                EncodedMemoryValueId(0),
+                EncodedMemoryValueId(0),
+                EncodedMemoryValueId(0),
+                EncodedMemoryValueId(0),
+                EncodedMemoryValueId(0),
+                EncodedMemoryValueId(0),
+                EncodedMemoryValueId(10),
+                EncodedMemoryValueId(11),
             ],
             inst_cache: [
-                (1, 5189976364521848832),
-                (5, 5189976364521848832),
-                (7, 5210805504208437248),
-                (3, 5189976364521848832),
-                (8, 5201798304953565184),
+                (9, 5210805504208502784),
             ]
             .into_iter()
             .collect(),
             f252_values: vec![],
             small_values: vec![
-                5189976364521848832,
-                1,
-                2,
-                3,
-                5210805504208437248,
-                5201798304953565184,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                5210805504208502784,
                 2345108766317314046,
-                17,
-                6,
+                0,
+                0,
                 7,
+                49,
             ],
         },
         public_memory_addresses: vec![],
-        builtins_segments: BuiltinSegments::default(),
+        builtins_segments: BuiltinSegments {
+            add_mod: None,
+            bitwise: None,
+            ec_op: None,
+            ecdsa: None,
+            keccak: None,
+            mul_mod: None,
+            pedersen: None,
+            poseidon: None,
+            range_check_bits_96: None,
+            range_check_bits_128: None,
+        },
     };
 
     let ProverParameters {
