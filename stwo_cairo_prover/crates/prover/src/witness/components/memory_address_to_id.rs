@@ -1,4 +1,3 @@
-use std::iter::zip;
 use std::ops::Index;
 use std::simd::Simd;
 
@@ -26,6 +25,7 @@ use crate::witness::utils::{AtomicMultiplicityColumn, TreeBuilder};
 pub type InputType = M31;
 pub type PackedInputType = PackedM31;
 
+#[derive(Debug)]
 /// A struct that represents a mapping from Address to ID. Zero address is not allowed.
 pub struct AddressToId {
     /// Since zero address is reserved, the vector holding the data is offset by 1, i.e. the ID of
@@ -134,24 +134,39 @@ impl ClaimGenerator {
         let next_multiple_of_16 = self.address_to_raw_id.len().next_multiple_of(16);
         self.address_to_raw_id.resize(next_multiple_of_16, 0);
 
+        println!("address_to_raw_id: {:#?}", self.address_to_raw_id);
+
         let id_it = self
             .address_to_raw_id
             .array_chunks::<N_LANES>()
             .map(|&chunk| unsafe { PackedM31::from_simd_unchecked(Simd::from_array(chunk)) });
         let multiplicities = self.multiplicities.into_simd_vec();
+        let addresses_it = (0..self
+            .address_to_raw_id.len())
+            .array_chunks::<N_LANES>()
+            .map(|chunk| unsafe { PackedM31::from_simd_unchecked(Simd::from_array(chunk.map(|f| f as u32 + 1))) });
 
-        for (i, (id, multiplicity)) in zip(id_it, multiplicities).enumerate() {
+        for (i, (id, multiplicity, address)) in izip!(id_it, multiplicities, addresses_it).enumerate() {
             let chunk_idx = i / n_packed_rows;
             let i = i % n_packed_rows;
             trace[chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[i] = id;
             trace[1 + chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[i] = multiplicity;
+            trace[2 + chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[i] = address;
         }
+
+        println!("trace: {:#?}", trace);
 
         // Lookup data.
         let ids: [_; MEMORY_ADDRESS_TO_ID_SPLIT] =
             std::array::from_fn(|i| trace[i * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data.clone());
         let multiplicities: [_; MEMORY_ADDRESS_TO_ID_SPLIT] =
             std::array::from_fn(|i| trace[1 + i * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data.clone());
+        let addresses: [_; MEMORY_ADDRESS_TO_ID_SPLIT] =
+            std::array::from_fn(|i| trace[2 + i * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data.clone());
+
+        println!("ids: {:#?}", ids);
+        println!("multiplicities: {:#?}", multiplicities);
+        println!("addresses: {:#?}", addresses);
 
         // Commit on trace.
         let log_size = size.checked_ilog2().unwrap();
