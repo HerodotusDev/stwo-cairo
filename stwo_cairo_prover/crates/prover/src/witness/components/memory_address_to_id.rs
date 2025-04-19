@@ -125,6 +125,10 @@ impl ClaimGenerator {
         tree_builder: &mut impl TreeBuilder<SimdBackend>,
     ) -> (Claim, InteractionClaimGenerator) {
         let multiplicities = self.multiplicities.into_simd_vec();
+
+        // Do not commit to memory cells that are not used by this shard.
+        // In sharding scenario this is going to be very common case as most of memory will never be read,
+        // only addresses that specific to shard cairo-cpu transition set.
         let size = std::cmp::max(
             (multiplicities.iter().filter(|f| !f.is_zero()).count() / MEMORY_ADDRESS_TO_ID_SPLIT).next_power_of_two(),
             N_LANES,
@@ -137,50 +141,32 @@ impl ClaimGenerator {
         let next_multiple_of_16 = self.address_to_raw_id.len().next_multiple_of(16);
         self.address_to_raw_id.resize(next_multiple_of_16, 0);
 
-        println!("address_to_raw_id: {:#?}", self.address_to_raw_id);
-
         let id_it = self
             .address_to_raw_id
             .array_chunks::<N_LANES>()
             .map(|&chunk| unsafe { PackedM31::from_simd_unchecked(Simd::from_array(chunk)) });
-        println!("multiplicities: {:?}", multiplicities);
         let addresses_it = (0..self.address_to_raw_id.len())
             .array_chunks::<N_LANES>()
             .map(|chunk| unsafe {
                 PackedM31::from_simd_unchecked(Simd::from_array(chunk.map(|f| f as u32 + 1)))
             });
 
+        // Commit only used memory to the trace later used by memory bus air-component.
         for (i, (id, multiplicity, address)) in
-            izip!(id_it, multiplicities, addresses_it).enumerate()
+            izip!(id_it, multiplicities, addresses_it).enumerate().filter(|(_, (_, multiplicity, _))| !multiplicity.is_zero())
         {
             let chunk_idx = i / n_packed_rows;
             let i = i % n_packed_rows;
-
-            if multiplicity.is_zero() {
-                println!("skipping multiplicity {} {}", chunk_idx, i);
-                continue;
-            }
-
-            println!("multiplicity {:?}", multiplicity);
-
             trace[chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[i] = id;
             trace[1 + chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[i] = multiplicity;
             trace[2 + chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[i] = address;
         }
-
-        println!("trace: {:#?}", trace);
 
         // Lookup data.
         let ids: [_; MEMORY_ADDRESS_TO_ID_SPLIT] =
             std::array::from_fn(|i| trace[i * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data.clone());
         let multiplicities: [_; MEMORY_ADDRESS_TO_ID_SPLIT] =
             std::array::from_fn(|i| trace[1 + i * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data.clone());
-        let addresses: [_; MEMORY_ADDRESS_TO_ID_SPLIT] =
-            std::array::from_fn(|i| trace[2 + i * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data.clone());
-
-        println!("ids: {:#?}", ids);
-        println!("multiplicities: {:#?}", multiplicities);
-        println!("addresses: {:#?}", addresses);
 
         // Commit on trace.
         let log_size = size.checked_ilog2().unwrap();
