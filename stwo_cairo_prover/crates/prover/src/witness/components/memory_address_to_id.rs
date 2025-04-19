@@ -8,6 +8,7 @@ use cairo_air::components::memory_address_to_id::{
 use cairo_air::preprocessed::Seq;
 use cairo_air::relations;
 use itertools::{izip, Itertools};
+use num_traits::Zero;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use stwo_cairo_adapter::memory::Memory;
 use stwo_prover::constraint_framework::logup::LogupTraceGenerator;
@@ -76,6 +77,7 @@ impl ClaimGenerator {
                 .map(|addr| memory.get_raw_id(addr as u32))
                 .collect_vec(),
         );
+        println!("address_to_raw_id len {}", address_to_raw_id.len());
         let multiplicities = AtomicMultiplicityColumn::new(address_to_raw_id.len());
 
         Self {
@@ -122,8 +124,9 @@ impl ClaimGenerator {
         mut self,
         tree_builder: &mut impl TreeBuilder<SimdBackend>,
     ) -> (Claim, InteractionClaimGenerator) {
+        let multiplicities = self.multiplicities.into_simd_vec();
         let size = std::cmp::max(
-            (self.address_to_raw_id.len() / MEMORY_ADDRESS_TO_ID_SPLIT).next_power_of_two(),
+            (multiplicities.iter().filter(|f| !f.is_zero()).count() / MEMORY_ADDRESS_TO_ID_SPLIT).next_power_of_two(),
             N_LANES,
         );
         let n_packed_rows = size.div_ceil(N_LANES);
@@ -140,15 +143,26 @@ impl ClaimGenerator {
             .address_to_raw_id
             .array_chunks::<N_LANES>()
             .map(|&chunk| unsafe { PackedM31::from_simd_unchecked(Simd::from_array(chunk)) });
-        let multiplicities = self.multiplicities.into_simd_vec();
-        let addresses_it = (0..self
-            .address_to_raw_id.len())
+        println!("multiplicities: {:?}", multiplicities);
+        let addresses_it = (0..self.address_to_raw_id.len())
             .array_chunks::<N_LANES>()
-            .map(|chunk| unsafe { PackedM31::from_simd_unchecked(Simd::from_array(chunk.map(|f| f as u32 + 1))) });
+            .map(|chunk| unsafe {
+                PackedM31::from_simd_unchecked(Simd::from_array(chunk.map(|f| f as u32 + 1)))
+            });
 
-        for (i, (id, multiplicity, address)) in izip!(id_it, multiplicities, addresses_it).enumerate() {
+        for (i, (id, multiplicity, address)) in
+            izip!(id_it, multiplicities, addresses_it).enumerate()
+        {
             let chunk_idx = i / n_packed_rows;
             let i = i % n_packed_rows;
+
+            if multiplicity.is_zero() {
+                println!("skipping multiplicity {} {}", chunk_idx, i);
+                continue;
+            }
+
+            println!("multiplicity {:?}", multiplicity);
+
             trace[chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[i] = id;
             trace[1 + chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[i] = multiplicity;
             trace[2 + chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[i] = address;

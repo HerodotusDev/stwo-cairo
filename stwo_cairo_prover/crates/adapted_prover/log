@@ -1,0 +1,1521 @@
+2025-04-16T20:25:49.124815Z  INFO prove_cairo: stwo_cairo_prover::prover: enter
+2025-04-16T20:25:55.657759Z  INFO prove_cairo:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:25:56.499524Z  INFO prove_cairo:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=842ms time.idle=1.04µs
+2025-04-16T20:25:56.499559Z  INFO prove_cairo:Commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:25:56.499563Z  INFO prove_cairo:Commitment:Commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:25:56.499565Z  INFO prove_cairo:Commitment:Commitment:Extension: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:25:58.386985Z  INFO prove_cairo:Commitment:Commitment:Extension: stwo_prover::core::pcs::prover: close time.busy=1.89s time.idle=1.04µs
+2025-04-16T20:25:58.387024Z  INFO prove_cairo:Commitment:Commitment:Merkle: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.616767Z  INFO prove_cairo:Commitment:Commitment:Merkle: stwo_prover::core::pcs::prover: close time.busy=3.23s time.idle=1.02µs
+2025-04-16T20:26:01.616864Z  INFO prove_cairo:Commitment:Commitment: stwo_prover::core::pcs::prover: close time.busy=5.12s time.idle=930ns
+2025-04-16T20:26:01.616885Z  INFO prove_cairo:Commitment: stwo_prover::core::pcs::prover: close time.busy=5.12s time.idle=556ns
+address_to_raw_id len 34
+2025-04-16T20:26:01.658471Z  INFO prove_cairo:Base trace: stwo_cairo_prover::prover: enter
+2025-04-16T20:26:01.658513Z  INFO prove_cairo:Base trace:write opcode trace: stwo_cairo_prover::witness::cairo: enter
+2025-04-16T20:26:01.658719Z  INFO prove_cairo:Base trace:write opcode trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.658782Z  INFO prove_cairo:Base trace:write opcode trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=61.6µs time.idle=949ns
+2025-04-16T20:26:01.658795Z  INFO prove_cairo:Base trace:write opcode trace: stwo_cairo_prover::witness::cairo: close time.busy=282µs time.idle=651ns
+2025-04-16T20:26:01.658800Z  INFO prove_cairo:Base trace:internal component trace: stwo_cairo_prover::witness::cairo: enter
+2025-04-16T20:26:01.658818Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.658841Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=23.2µs time.idle=343ns
+2025-04-16T20:26:01.658846Z  INFO prove_cairo:Base trace:internal component trace:write blake context trace: stwo_cairo_prover::witness::blake_context: enter
+2025-04-16T20:26:01.658849Z  INFO prove_cairo:Base trace:internal component trace:write blake context trace: stwo_cairo_prover::witness::blake_context: close time.busy=2.79µs time.idle=293ns
+2025-04-16T20:26:01.660717Z  INFO prove_cairo:Base trace:internal component trace:write pedersen context trace: stwo_cairo_prover::witness::components::pedersen: enter
+2025-04-16T20:26:01.660722Z  INFO prove_cairo:Base trace:internal component trace:write pedersen context trace: stwo_cairo_prover::witness::components::pedersen: close time.busy=4.99µs time.idle=440ns
+2025-04-16T20:26:01.661516Z  INFO prove_cairo:Base trace:internal component trace:write poseidon context trace: stwo_cairo_prover::witness::components::poseidon: enter
+2025-04-16T20:26:01.661522Z  INFO prove_cairo:Base trace:internal component trace:write poseidon context trace: stwo_cairo_prover::witness::components::poseidon: close time.busy=5.94µs time.idle=522ns
+address_to_raw_id: AddressToId {
+    data: [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        6,
+        7,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        10,
+        11,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ],
+}
+multiplicities: [PackedM31([0, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0]), PackedM31([32, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), PackedM31([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])]
+multiplicity PackedM31([0, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0])
+multiplicity PackedM31([32, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+skipping multiplicity 2 0
+trace: [
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    6,
+                    7,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    16,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    10,
+                    11,
+                    12,
+                    13,
+                    14,
+                    15,
+                    16,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    10,
+                    11,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    32,
+                    16,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    17,
+                    18,
+                    19,
+                    20,
+                    21,
+                    22,
+                    23,
+                    24,
+                    25,
+                    26,
+                    27,
+                    28,
+                    29,
+                    30,
+                    31,
+                    32,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+    BaseColumn {
+        data: [
+            PackedM31(
+                [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+        ],
+        length: 16,
+    },
+]
+ids: [
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                6,
+                7,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                10,
+                11,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+]
+multiplicities: [
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                16,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                32,
+                16,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+]
+addresses: [
+    [
+        PackedM31(
+            [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                17,
+                18,
+                19,
+                20,
+                21,
+                22,
+                23,
+                24,
+                25,
+                26,
+                27,
+                28,
+                29,
+                30,
+                31,
+                32,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+    [
+        PackedM31(
+            [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+        ),
+    ],
+]
+2025-04-16T20:26:01.663552Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.663586Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=33.5µs time.idle=510ns
+2025-04-16T20:26:01.663626Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.663665Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=38.6µs time.idle=281ns
+2025-04-16T20:26:01.663675Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.663689Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=13.8µs time.idle=271ns
+2025-04-16T20:26:01.663694Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.663698Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=4.10µs time.idle=301ns
+2025-04-16T20:26:01.663704Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.663709Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=5.08µs time.idle=253ns
+2025-04-16T20:26:01.663717Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.663731Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=14.0µs time.idle=256ns
+2025-04-16T20:26:01.663743Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.663770Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=26.9µs time.idle=246ns
+2025-04-16T20:26:01.664781Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.665599Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=817µs time.idle=769ns
+2025-04-16T20:26:01.667437Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.668961Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=1.52ms time.idle=1.13µs
+2025-04-16T20:26:01.668997Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.669013Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=15.2µs time.idle=714ns
+2025-04-16T20:26:01.669026Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.669046Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=19.2µs time.idle=513ns
+2025-04-16T20:26:01.669059Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.669068Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=8.92µs time.idle=367ns
+2025-04-16T20:26:01.669080Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.669091Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=10.4µs time.idle=363ns
+2025-04-16T20:26:01.670357Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.671187Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=829µs time.idle=988ns
+2025-04-16T20:26:01.671276Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.671474Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=198µs time.idle=804ns
+2025-04-16T20:26:01.672600Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.673840Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=1.24ms time.idle=1.11µs
+2025-04-16T20:26:01.673995Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.674518Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=522µs time.idle=659ns
+2025-04-16T20:26:01.674597Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.674850Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=253µs time.idle=332ns
+2025-04-16T20:26:01.675042Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.675053Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=10.6µs time.idle=421ns
+2025-04-16T20:26:01.675181Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.675375Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=193µs time.idle=722ns
+2025-04-16T20:26:01.675963Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.676619Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=655µs time.idle=1.13µs
+2025-04-16T20:26:01.677940Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.678797Z  INFO prove_cairo:Base trace:internal component trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=857µs time.idle=1.18µs
+2025-04-16T20:26:01.678823Z  INFO prove_cairo:Base trace:internal component trace: stwo_cairo_prover::witness::cairo: close time.busy=20.0ms time.idle=569ns
+2025-04-16T20:26:01.678847Z  INFO prove_cairo:Base trace: stwo_cairo_prover::prover: close time.busy=20.4ms time.idle=1.03µs
+2025-04-16T20:26:01.678882Z  INFO prove_cairo:Commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.678889Z  INFO prove_cairo:Commitment:Commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.678898Z  INFO prove_cairo:Commitment:Commitment:Extension: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.688803Z  INFO prove_cairo:Commitment:Commitment:Extension: stwo_prover::core::pcs::prover: close time.busy=9.90ms time.idle=1.52µs
+2025-04-16T20:26:01.688882Z  INFO prove_cairo:Commitment:Commitment:Merkle: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:01.756723Z  INFO prove_cairo:Commitment:Commitment:Merkle: stwo_prover::core::pcs::prover: close time.busy=67.8ms time.idle=1.45µs
+2025-04-16T20:26:01.756769Z  INFO prove_cairo:Commitment:Commitment: stwo_prover::core::pcs::prover: close time.busy=77.9ms time.idle=681ns
+2025-04-16T20:26:01.756777Z  INFO prove_cairo:Commitment: stwo_prover::core::pcs::prover: close time.busy=77.9ms time.idle=822ns
+2025-04-16T20:26:02.215724Z  INFO prove_cairo:Interaction trace: stwo_cairo_prover::prover: enter
+2025-04-16T20:26:02.215834Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.215871Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=37.4µs time.idle=735ns
+2025-04-16T20:26:02.215901Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.215919Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=17.7µs time.idle=275ns
+2025-04-16T20:26:02.215947Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.215970Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=22.9µs time.idle=276ns
+2025-04-16T20:26:02.216015Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.216076Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=61.0µs time.idle=275ns
+2025-04-16T20:26:02.216105Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.216132Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=26.9µs time.idle=280ns
+2025-04-16T20:26:02.216148Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.216154Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=5.86µs time.idle=268ns
+2025-04-16T20:26:02.216419Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.216460Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=41.7µs time.idle=1.11µs
+2025-04-16T20:26:02.216918Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.217107Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=189µs time.idle=1.16µs
+2025-04-16T20:26:02.217515Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.217716Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=200µs time.idle=1.23µs
+2025-04-16T20:26:02.228518Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.231895Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=3.38ms time.idle=1.54µs
+2025-04-16T20:26:02.250213Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.255176Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=4.96ms time.idle=1.73µs
+2025-04-16T20:26:02.255290Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.255313Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=22.3µs time.idle=1.23µs
+2025-04-16T20:26:02.255442Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.255461Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=19.0µs time.idle=914ns
+2025-04-16T20:26:02.255531Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.255561Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=30.2µs time.idle=1.05µs
+2025-04-16T20:26:02.255681Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.255707Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=26.1µs time.idle=840ns
+2025-04-16T20:26:02.262315Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.264835Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=2.52ms time.idle=937ns
+2025-04-16T20:26:02.265857Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.266298Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=441µs time.idle=835ns
+2025-04-16T20:26:02.275683Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.278612Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=2.93ms time.idle=1.49µs
+2025-04-16T20:26:02.282759Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.284653Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=1.89ms time.idle=1.05µs
+2025-04-16T20:26:02.286873Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.287767Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=894µs time.idle=942ns
+2025-04-16T20:26:02.287957Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.287970Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=12.4µs time.idle=382ns
+2025-04-16T20:26:02.289096Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.289528Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=432µs time.idle=780ns
+2025-04-16T20:26:02.292836Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.295686Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=2.85ms time.idle=1.05µs
+2025-04-16T20:26:02.306261Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.309002Z  INFO prove_cairo:Interaction trace:Interpolation for commitment: stwo_prover::core::pcs::prover: close time.busy=2.74ms time.idle=1.75µs
+2025-04-16T20:26:02.309024Z  INFO prove_cairo:Interaction trace: stwo_cairo_prover::prover: close time.busy=93.3ms time.idle=1.23µs
+2025-04-16T20:26:02.309090Z  INFO prove_cairo: stwo_cairo_prover::prover: Witness trace cells: [510341040, 1779440, 7112064]
+2025-04-16T20:26:02.309101Z  INFO prove_cairo:Commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.309104Z  INFO prove_cairo:Commitment:Commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.309107Z  INFO prove_cairo:Commitment:Commitment:Extension: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.341181Z  INFO prove_cairo:Commitment:Commitment:Extension: stwo_prover::core::pcs::prover: close time.busy=32.1ms time.idle=1.25µs
+2025-04-16T20:26:02.341247Z  INFO prove_cairo:Commitment:Commitment:Merkle: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.404417Z  INFO prove_cairo:Commitment:Commitment:Merkle: stwo_prover::core::pcs::prover: close time.busy=63.2ms time.idle=1.12µs
+2025-04-16T20:26:02.404486Z  INFO prove_cairo:Commitment:Commitment: stwo_prover::core::pcs::prover: close time.busy=95.4ms time.idle=694ns
+2025-04-16T20:26:02.404499Z  INFO prove_cairo:Commitment: stwo_prover::core::pcs::prover: close time.busy=95.4ms time.idle=677ns
+2025-04-16T20:26:02.404912Z  INFO prove_cairo:Prove STARKs: stwo_cairo_prover::prover: enter
+2025-04-16T20:26:02.404925Z  INFO prove_cairo:Prove STARKs:prove: stwo_prover::core::prover: enter
+2025-04-16T20:26:02.404944Z  INFO prove_cairo:Prove STARKs:prove:Composition: stwo_prover::core::prover: enter
+2025-04-16T20:26:02.404953Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation: stwo_prover::core::prover: enter
+2025-04-16T20:26:02.404992Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.405446Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=452µs time.idle=989ns
+2025-04-16T20:26:02.405506Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.405630Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=124µs time.idle=705ns
+2025-04-16T20:26:02.405659Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.405811Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=152µs time.idle=298ns
+2025-04-16T20:26:02.405824Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.406087Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=263µs time.idle=306ns
+2025-04-16T20:26:02.406106Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.406240Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=135µs time.idle=288ns
+2025-04-16T20:26:02.406253Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.406494Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=241µs time.idle=577ns
+2025-04-16T20:26:02.406525Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.406605Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=80.0µs time.idle=579ns
+2025-04-16T20:26:02.406622Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.407005Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=382µs time.idle=736ns
+2025-04-16T20:26:02.407056Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.407343Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=287µs time.idle=900ns
+2025-04-16T20:26:02.411261Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.422472Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=11.2ms time.idle=1.51µs
+2025-04-16T20:26:02.427439Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.449853Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=22.4ms time.idle=1.35µs
+2025-04-16T20:26:02.449959Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.450220Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=261µs time.idle=1.30µs
+2025-04-16T20:26:02.450250Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.450366Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=115µs time.idle=876ns
+2025-04-16T20:26:02.450406Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.450788Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=382µs time.idle=896ns
+2025-04-16T20:26:02.450820Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.450977Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=157µs time.idle=794ns
+2025-04-16T20:26:02.451018Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.462266Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=11.2ms time.idle=1.17µs
+2025-04-16T20:26:02.462482Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.463448Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=966µs time.idle=1.30µs
+2025-04-16T20:26:02.463496Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.478404Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=14.9ms time.idle=1.08µs
+2025-04-16T20:26:02.478563Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.482476Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=3.91ms time.idle=1.14µs
+2025-04-16T20:26:02.482589Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.485335Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=2.74ms time.idle=1.34µs
+2025-04-16T20:26:02.485373Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.485445Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=71.7µs time.idle=723ns
+2025-04-16T20:26:02.485458Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.486423Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=964µs time.idle=755ns
+2025-04-16T20:26:02.486476Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.489340Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=2.86ms time.idle=1.07µs
+2025-04-16T20:26:02.489404Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: enter
+2025-04-16T20:26:02.501386Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraint point-wise eval: stwo_prover::constraint_framework::component: close time.busy=12.0ms time.idle=848ns
+2025-04-16T20:26:02.501440Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraints interpolation: stwo_prover::core::air::accumulation: enter
+2025-04-16T20:26:02.545241Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation:Constraints interpolation: stwo_prover::core::air::accumulation: close time.busy=43.8ms time.idle=944ns
+2025-04-16T20:26:02.545281Z  INFO prove_cairo:Prove STARKs:prove:Composition:Generation: stwo_prover::core::prover: close time.busy=140ms time.idle=2.56µs
+2025-04-16T20:26:02.545288Z  INFO prove_cairo:Prove STARKs:prove:Composition:Commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.545292Z  INFO prove_cairo:Prove STARKs:prove:Composition:Commitment:Commitment: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.545306Z  INFO prove_cairo:Prove STARKs:prove:Composition:Commitment:Commitment:Extension: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.557635Z  INFO prove_cairo:Prove STARKs:prove:Composition:Commitment:Commitment:Extension: stwo_prover::core::pcs::prover: close time.busy=12.3ms time.idle=1.27µs
+2025-04-16T20:26:02.557689Z  INFO prove_cairo:Prove STARKs:prove:Composition:Commitment:Commitment:Merkle: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.667291Z  INFO prove_cairo:Prove STARKs:prove:Composition:Commitment:Commitment:Merkle: stwo_prover::core::pcs::prover: close time.busy=110ms time.idle=1.56µs
+2025-04-16T20:26:02.667336Z  INFO prove_cairo:Prove STARKs:prove:Composition:Commitment:Commitment: stwo_prover::core::pcs::prover: close time.busy=122ms time.idle=485ns
+2025-04-16T20:26:02.667348Z  INFO prove_cairo:Prove STARKs:prove:Composition:Commitment: stwo_prover::core::pcs::prover: close time.busy=122ms time.idle=867ns
+2025-04-16T20:26:02.667356Z  INFO prove_cairo:Prove STARKs:prove:Composition: stwo_prover::core::prover: close time.busy=262ms time.idle=557ns
+2025-04-16T20:26:02.667554Z  INFO prove_cairo:Prove STARKs:prove:Evaluate columns out of domain: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:02.742323Z  INFO prove_cairo:Prove STARKs:prove:Evaluate columns out of domain: stwo_prover::core::pcs::prover: close time.busy=74.8ms time.idle=1.16µs
+2025-04-16T20:26:02.742436Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients: stwo_prover::core::pcs::quotients: enter
+2025-04-16T20:26:02.742475Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:02.891532Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=149ms time.idle=842ns
+2025-04-16T20:26:02.891568Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:03.021075Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=130ms time.idle=1.04µs
+2025-04-16T20:26:03.021107Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:03.715166Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=694ms time.idle=973ns
+2025-04-16T20:26:03.721969Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:03.780772Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=58.8ms time.idle=1.46µs
+2025-04-16T20:26:03.780790Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:03.839781Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=59.0ms time.idle=1.88µs
+2025-04-16T20:26:03.839861Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.146236Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=306ms time.idle=1.48µs
+2025-04-16T20:26:04.151056Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.181198Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=30.1ms time.idle=1.00µs
+2025-04-16T20:26:04.181219Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.208917Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=27.7ms time.idle=1.59µs
+2025-04-16T20:26:04.208955Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.351708Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=143ms time.idle=1.10µs
+2025-04-16T20:26:04.351749Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.357484Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=5.73ms time.idle=851ns
+2025-04-16T20:26:04.357503Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.366445Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=8.94ms time.idle=1.97µs
+2025-04-16T20:26:04.366522Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.429400Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=62.9ms time.idle=1.26µs
+2025-04-16T20:26:04.429481Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.439319Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=9.84ms time.idle=1.17µs
+2025-04-16T20:26:04.439365Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.449502Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=10.1ms time.idle=1.57µs
+2025-04-16T20:26:04.449573Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.485759Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=36.2ms time.idle=1.29µs
+2025-04-16T20:26:04.485806Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.495311Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=9.50ms time.idle=829ns
+2025-04-16T20:26:04.495361Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.504702Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=9.34ms time.idle=1.05µs
+2025-04-16T20:26:04.504734Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.519851Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=15.1ms time.idle=853ns
+2025-04-16T20:26:04.519917Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.523880Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=3.96ms time.idle=1.09µs
+2025-04-16T20:26:04.523943Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.534306Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=10.4ms time.idle=1.05µs
+2025-04-16T20:26:04.534465Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.543349Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=8.88ms time.idle=2.12µs
+2025-04-16T20:26:04.543384Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.543776Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=391µs time.idle=741ns
+2025-04-16T20:26:04.543785Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.544398Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=612µs time.idle=679ns
+2025-04-16T20:26:04.544435Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.548643Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=4.21ms time.idle=1.06µs
+2025-04-16T20:26:04.548670Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.549701Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=1.03ms time.idle=804ns
+2025-04-16T20:26:04.549725Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.551390Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=1.66ms time.idle=645ns
+2025-04-16T20:26:04.551418Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.556976Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=5.56ms time.idle=1.08µs
+2025-04-16T20:26:04.557007Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.557617Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=610µs time.idle=597ns
+2025-04-16T20:26:04.557625Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.558212Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=586µs time.idle=410ns
+2025-04-16T20:26:04.558222Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.561024Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=2.80ms time.idle=451ns
+2025-04-16T20:26:04.561044Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.561479Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=434µs time.idle=371ns
+2025-04-16T20:26:04.561491Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.561893Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=403µs time.idle=317ns
+2025-04-16T20:26:04.561910Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.563196Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=1.29ms time.idle=324ns
+2025-04-16T20:26:04.563203Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.563233Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=29.5µs time.idle=419ns
+2025-04-16T20:26:04.563236Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.563312Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=75.6µs time.idle=245ns
+2025-04-16T20:26:04.563318Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.564225Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=907µs time.idle=272ns
+2025-04-16T20:26:04.564233Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.564431Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=197µs time.idle=477ns
+2025-04-16T20:26:04.564447Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.564550Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=103µs time.idle=596ns
+2025-04-16T20:26:04.564559Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.565078Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=518µs time.idle=683ns
+2025-04-16T20:26:04.565110Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.565278Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=168µs time.idle=691ns
+2025-04-16T20:26:04.565287Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.565370Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=82.7µs time.idle=420ns
+2025-04-16T20:26:04.565376Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.565658Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=282µs time.idle=631ns
+2025-04-16T20:26:04.565681Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.565708Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=26.9µs time.idle=508ns
+2025-04-16T20:26:04.565724Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.565816Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=90.3µs time.idle=672ns
+2025-04-16T20:26:04.565837Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.565945Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=108µs time.idle=520ns
+2025-04-16T20:26:04.565956Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.566028Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=71.7µs time.idle=445ns
+2025-04-16T20:26:04.566065Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.566111Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=45.5µs time.idle=398ns
+2025-04-16T20:26:04.566123Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.566191Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=67.7µs time.idle=295ns
+2025-04-16T20:26:04.566200Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.566273Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=72.6µs time.idle=520ns
+2025-04-16T20:26:04.566295Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.566352Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=56.8µs time.idle=437ns
+2025-04-16T20:26:04.566356Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.566401Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=44.7µs time.idle=271ns
+2025-04-16T20:26:04.566409Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.566500Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=90.5µs time.idle=311ns
+2025-04-16T20:26:04.566526Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.566558Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=32.0µs time.idle=18.5µs
+2025-04-16T20:26:04.566563Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.566595Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=31.4µs time.idle=268ns
+2025-04-16T20:26:04.566606Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.566653Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient constants: stwo_prover::core::backend::simd::quotients: close time.busy=46.1µs time.idle=249ns
+2025-04-16T20:26:04.566684Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.566697Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient accumulation: stwo_prover::core::backend::simd::quotients: close time.busy=12.8µs time.idle=316ns
+2025-04-16T20:26:04.566700Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: enter
+2025-04-16T20:26:04.566719Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients:Quotient extension: stwo_prover::core::backend::simd::quotients: close time.busy=18.4µs time.idle=258ns
+2025-04-16T20:26:04.566852Z  INFO prove_cairo:Prove STARKs:prove:Compute FRI quotients: stwo_prover::core::pcs::quotients: close time.busy=1.82s time.idle=699ns
+2025-04-16T20:26:04.566867Z  INFO prove_cairo:Prove STARKs:prove:commit: stwo_prover::core::fri: enter
+2025-04-16T20:26:09.365955Z  INFO prove_cairo:Prove STARKs:prove:commit: stwo_prover::core::fri: close time.busy=4.80s time.idle=555ns
+2025-04-16T20:26:09.366017Z  INFO prove_cairo:Prove STARKs:prove:Grind: stwo_prover::core::pcs::prover: enter
+2025-04-16T20:26:09.366080Z  INFO prove_cairo:Prove STARKs:prove:Grind: stwo_prover::core::pcs::prover: close time.busy=62.4µs time.idle=824ns
+2025-04-16T20:26:09.756952Z  INFO prove_cairo:Prove STARKs:prove: stwo_prover::core::prover: proof_size_estimate=23936
+2025-04-16T20:26:09.757116Z  INFO prove_cairo:Prove STARKs:prove: stwo_prover::core::prover: close time.busy=7.35s time.idle=476ns
+2025-04-16T20:26:09.757126Z  INFO prove_cairo:Prove STARKs: stwo_cairo_prover::prover: close time.busy=7.35s time.idle=980ns
+2025-04-16T20:26:09.859030Z  INFO prove_cairo: stwo_cairo_prover::prover: close time.busy=20.7s time.idle=1.56µs
