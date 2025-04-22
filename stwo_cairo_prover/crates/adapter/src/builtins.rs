@@ -208,8 +208,8 @@ impl BuiltinSegments {
 
     // If the final segment in a builtin segment, and the final entry has a hole, the memory must be
     // resized to include the hole.
-    fn resize_memory_to_cover_holes(&self, _memory: &mut MemoryBuilder) {
-        let _max_stop_ptr = [
+    fn resize_memory_to_cover_holes(&self, memory: &mut MemoryBuilder) {
+        let max_stop_ptr = [
             self.add_mod.as_ref(),
             self.bitwise.as_ref(),
             self.ec_op.as_ref(),
@@ -225,6 +225,10 @@ impl BuiltinSegments {
         .filter_map(|segment| segment.map(|s| s.stop_ptr))
         .max()
         .unwrap_or(0);
+        let len = memory.address_to_id.len();
+        memory
+            .address_to_id
+            .resize(std::cmp::max(len, max_stop_ptr), Default::default());
     }
 }
 
@@ -301,17 +305,17 @@ mod builtin_padding {
             let op0 = memory.get(op0_addr).as_u256();
             let op1 = memory.get(op1_addr).as_u256();
 
-            if let MemoryValueId::Empty = memory.address_to_id.get(&and_addr).unwrap().decode() {
+            if let MemoryValueId::Empty = memory.address_to_id[and_addr as usize].decode() {
                 let and_res = value_from_felt252(std::array::from_fn(|i| op0[i] & op1[i]));
                 memory.set(and_addr, and_res);
             }
 
-            if let MemoryValueId::Empty = memory.address_to_id.get(&xor_addr).unwrap().decode() {
+            if let MemoryValueId::Empty = memory.address_to_id[xor_addr as usize].decode() {
                 let xor_res = value_from_felt252(std::array::from_fn(|i| op0[i] ^ op1[i]));
                 memory.set(xor_addr, xor_res);
             }
 
-            if let MemoryValueId::Empty = memory.address_to_id.get(&or_addr).unwrap().decode() {
+            if let MemoryValueId::Empty = memory.address_to_id[or_addr as usize].decode() {
                 let or_res = value_from_felt252(std::array::from_fn(|i| op0[i] | op1[i]));
                 memory.set(or_addr, or_res);
             }
