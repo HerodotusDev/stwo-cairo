@@ -64,8 +64,8 @@ impl FrameworkEval for Eval {
                 &[address, id],
             ));
 
-            // This is right now dummy constraint just to satisfy logup sums of memory address to id component
-            // TODO: perform memory bus calculations and expose them in final proof
+            // This is right now dummy constraint just to satisfy lookup sums of memory address to id component.
+            // TODO: perform memory bus calculations and expose them in final proof.
         }
 
         eval.finalize_logup_in_pairs();
