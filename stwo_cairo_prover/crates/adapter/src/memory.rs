@@ -206,19 +206,19 @@ impl MemoryBuilder {
 
     pub fn assert_segment_is_empty(&self, start_addr: u32, segment_length: u32) {
         let len = self.address_to_id.len();
-        let _start = start_addr as usize;
-        let _end = std::cmp::min(len, (start_addr + segment_length) as usize);
+        let start = start_addr as usize;
+        let end = std::cmp::min(len, (start_addr + segment_length) as usize);
 
-        // if let Some(non_empty) = self.address_to_id[start..end]
-        //     .iter()
-        //     .position(|&id| id != EncodedMemoryValueId::default())
-        // {
-        //     panic!(
-        //         "Memory expected empty at addresses {}, found ID: {:?}",
-        //         start + non_empty,
-        //         self.address_to_id[start + non_empty]
-        //     );
-        // }
+        if let Some(non_empty) = self.address_to_id[start..end]
+            .iter()
+            .position(|&id| id != EncodedMemoryValueId::default())
+        {
+            panic!(
+                "Memory expected empty at addresses {}, found ID: {:?}",
+                start + non_empty,
+                self.address_to_id[start + non_empty]
+            );
+        }
     }
 
     pub fn build(self) -> Memory {
