@@ -5,7 +5,6 @@ use cairo_air::components::memory_address_to_id::{
     Claim, InteractionClaim, MEMORY_ADDRESS_TO_ID_SPLIT, N_ID_AND_MULT_COLUMNS_PER_CHUNK,
     N_TRACE_COLUMNS,
 };
-use cairo_air::preprocessed::Seq;
 use cairo_air::relations;
 use itertools::{izip, Itertools};
 use num_traits::Zero;
@@ -77,7 +76,6 @@ impl ClaimGenerator {
                 .map(|addr| memory.get_raw_id(addr as u32))
                 .collect_vec(),
         );
-        println!("address_to_raw_id len {}", address_to_raw_id.len());
         let multiplicities = AtomicMultiplicityColumn::new(address_to_raw_id.len());
 
         Self {
@@ -124,16 +122,23 @@ impl ClaimGenerator {
         mut self,
         tree_builder: &mut impl TreeBuilder<SimdBackend>,
     ) -> (Claim, InteractionClaimGenerator) {
-        let multiplicities = self.multiplicities.into_simd_vec();
+        let multiplicities: Vec<PackedM31> = self.multiplicities.into_simd_vec();
+        println!(
+            "multiplicities {} / {}",
+            multiplicities.iter().filter(|f| !f.is_zero()).count(),
+            multiplicities.len()
+        );
 
         // Do not commit to memory cells that are not used by this shard.
-        // In sharding scenario this is going to be very common case as most of memory will never be read,
-        // only addresses that specific to shard cairo-cpu transition set.
+        // In sharding scenario this is going to be very common case as most of memory will never be
+        // read, only addresses that specific to shard cairo-cpu transition set.
         let size = std::cmp::max(
-            (multiplicities.iter().filter(|f| !f.is_zero()).count() / MEMORY_ADDRESS_TO_ID_SPLIT).next_power_of_two(),
+            (multiplicities.iter()
+            .filter(|f| !f.is_zero()).count() * N_LANES / MEMORY_ADDRESS_TO_ID_SPLIT).next_power_of_two(),
             N_LANES,
         );
         let n_packed_rows = size.div_ceil(N_LANES);
+        println!("size: {}, n_packed_rows: {}", size, n_packed_rows);
         let mut trace: [_; N_TRACE_COLUMNS] =
             std::array::from_fn(|_| Col::<SimdBackend, M31>::zeros(size));
 
@@ -153,10 +158,11 @@ impl ClaimGenerator {
 
         // Commit only used memory to the trace later used by memory bus air-component.
         for (i, (id, multiplicity, address)) in
-            izip!(id_it, multiplicities, addresses_it).enumerate().filter(|(_, (_, multiplicity, _))| !multiplicity.is_zero())
+            izip!(id_it, multiplicities, addresses_it).filter(|(_, m, _)| !m.is_zero()).enumerate()
         {
             let chunk_idx = i / n_packed_rows;
             let i = i % n_packed_rows;
+            println!("i: {}, chunk_idx: {}", i, chunk_idx);
             trace[chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[i] = id;
             trace[1 + chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[i] = multiplicity;
             trace[2 + chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[i] = address;
@@ -167,6 +173,12 @@ impl ClaimGenerator {
             std::array::from_fn(|i| trace[i * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data.clone());
         let multiplicities: [_; MEMORY_ADDRESS_TO_ID_SPLIT] =
             std::array::from_fn(|i| trace[1 + i * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data.clone());
+        let addresses: [_; MEMORY_ADDRESS_TO_ID_SPLIT] =
+            std::array::from_fn(|i| trace[2 + i * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data.clone());
+
+        println!("ids: {:?}", ids);
+        println!("multiplicities: {:?}", multiplicities);
+        println!("addresses: {:?}", addresses);
 
         // Commit on trace.
         let log_size = size.checked_ilog2().unwrap();
@@ -184,6 +196,7 @@ impl ClaimGenerator {
             InteractionClaimGenerator {
                 ids,
                 multiplicities,
+                addresses,
             },
         )
     }
@@ -192,6 +205,7 @@ impl ClaimGenerator {
 pub struct InteractionClaimGenerator {
     pub ids: [Vec<PackedM31>; MEMORY_ADDRESS_TO_ID_SPLIT],
     pub multiplicities: [Vec<PackedM31>; MEMORY_ADDRESS_TO_ID_SPLIT],
+    pub addresses: [Vec<PackedM31>; MEMORY_ADDRESS_TO_ID_SPLIT],
 }
 impl InteractionClaimGenerator {
     pub fn write_interaction_trace(
@@ -201,19 +215,15 @@ impl InteractionClaimGenerator {
     ) -> InteractionClaim {
         let packed_size = self.ids[0].len();
         let log_size = packed_size.ilog2() + LOG_N_LANES;
-        let n_rows = 1 << log_size;
         let mut logup_gen = LogupTraceGenerator::new(log_size);
 
-        for (i, ((ids0, mults0), (ids1, mults1))) in
-            izip!(&self.ids, &self.multiplicities).tuples().enumerate()
+        for ((ids0, mults0, addr0), (ids1, mults1, addr1)) in
+            izip!(&self.ids, &self.multiplicities, self.addresses).tuples()
         {
             let mut col_gen = logup_gen.new_col();
-            for (vec_row, (&id0, &id1, &mult0, &mult1)) in
-                izip!(ids0, ids1, mults0, mults1).enumerate()
+            for (vec_row, (&id0, &id1, &mult0, &mult1, addr0, addr1)) in
+                izip!(ids0, ids1, mults0, mults1, addr0, addr1).enumerate()
             {
-                let addr = Seq::new(log_size).packed_at(vec_row) + PackedM31::broadcast(M31(1));
-                let addr0 = addr + PackedM31::broadcast(M31(((i * 2) * n_rows) as u32));
-                let addr1 = addr + PackedM31::broadcast(M31(((i * 2 + 1) * n_rows) as u32));
                 let p0: PackedQM31 = lookup_elements.combine(&[addr0, id0]);
                 let p1: PackedQM31 = lookup_elements.combine(&[addr1, id1]);
                 col_gen.write_frac(vec_row, p0 * (-mult1) + p1 * (-mult0), p1 * p0);
