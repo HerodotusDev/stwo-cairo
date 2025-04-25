@@ -5,6 +5,7 @@ use cairo_air::components::memory_id_to_big::{Claim, InteractionClaim, MEMORY_ID
 use cairo_air::preprocessed::SIMD_ENUMERATION_0;
 use cairo_air::relations;
 use itertools::{chain, izip, Itertools};
+use num_traits::Zero;
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
@@ -136,6 +137,10 @@ impl ClaimGenerator {
         let small_ids = small_table_trace[N_M31_IN_SMALL_FELT252].data.clone();
         let small_multiplicities = small_table_trace[N_M31_IN_SMALL_FELT252 + 1].data.clone();
 
+        println!("SMALL VALUES: {small_values:?}");
+        println!("SMALL IDS: {small_ids:?}");
+        println!("SMALL MULTIPLICITIES: {small_multiplicities:?}");
+
         // println!("Small values: {small_values:?}");
         // println!("Small multiplicities: {small_multiplicities:?}");
 
@@ -151,6 +156,8 @@ impl ClaimGenerator {
             col0.par_iter()
                 .zip(col1.par_iter())
                 .for_each(|(val0, val1)| {
+                    println!("SMALL VAL0: {val0:?}");
+                    println!("SMALL VAL1: {val1:?}");
                     range_check_9_9_trace_generator.add_packed_m31(&[*val0, *val1]);
                 });
         }
@@ -171,6 +178,7 @@ impl ClaimGenerator {
         let trace = small_table_trace
             .into_iter()
             .map(|eval| {
+                println!("SMALL EVAL: {eval:?}");
                 CircleEvaluation::<SimdBackend, M31, BitReversedOrder>::new(
                     CanonicCoset::new(small_log_size).circle_domain(),
                     eval,
@@ -224,17 +232,20 @@ fn gen_big_memory_trace(values: Vec<[u32; 8]>, mults: Vec<PackedM31>) -> Vec<Bas
 
 // Generates the trace of the small value memory table.
 fn gen_small_memory_trace(values: Vec<u128>, mults: Vec<PackedM31>) -> Vec<BaseColumn> {
-    // println!("Small values: {values:?}");
-    // println!("Small multiplicities: {mults:?}");
+    println!("Small values: {values:?}");
+    println!("Small values len: {:?}", values.len());
+    println!("Small multiplicities: {mults:?}");
 
     let column_length = mults
         .iter()
         .filter(|m| !m.is_zero())
-        .count() * N_LANES;
+        .count()
+        .next_power_of_two();
+    println!("Small column_length: {:?}", column_length);
 
     // let column_length = values.len();
 
-    let (ids, packed_values): (Vec<PackedM31>, Vec<[Simd<u32, N_LANES>; 4]>) = izip!(
+    let (mut ids, packed_values): (Vec<PackedM31>, Vec<[Simd<u32, N_LANES>; 4]>) = izip!(
         (0..values.len() as u32)
             .into_iter()
             .array_chunks::<N_LANES>(),
@@ -255,10 +266,9 @@ fn gen_small_memory_trace(values: Vec<u128>, mults: Vec<PackedM31>) -> Vec<BaseC
     })
     .unzip();
 
-    let mut values_trace =
-        std::iter::repeat_with(|| unsafe { BaseColumn::uninitialized(column_length) })
-            .take(N_M31_IN_SMALL_FELT252)
-            .collect_vec();
+    let mut values_trace = std::iter::repeat_with(|| BaseColumn::zeros(column_length * N_LANES))
+        .take(N_M31_IN_SMALL_FELT252)
+        .collect_vec();
     for (i, values) in packed_values.iter().enumerate() {
         let values = split_f252_simd([
             values[0],
@@ -270,23 +280,27 @@ fn gen_small_memory_trace(values: Vec<u128>, mults: Vec<PackedM31>) -> Vec<BaseC
             Simd::splat(0),
             Simd::splat(0),
         ]);
+        println!("split_f252_simd VALUES: {values:?}");
         for (j, value) in values[..N_M31_IN_SMALL_FELT252].iter().enumerate() {
             values_trace[j].data[i] = *value;
         }
     }
 
+    ids.resize(column_length, PackedM31::zero());
+
     let id_it = BaseColumn::from_simd(ids);
 
-    let multiplicities = BaseColumn::from_simd(
-        mults
-            .into_iter()
-            .filter(|m| !m.is_zero())
-            .collect::<Vec<_>>(),
-    );
+    let mut multsis = mults
+        .into_iter()
+        .filter(|m| !m.is_zero())
+        .collect::<Vec<_>>();
+    multsis.resize(column_length, PackedM31::zero());
 
-    // println!("Small values trace: {values_trace:?}");
-    // println!("Small multiplicities trace: {multiplicities:?}");
-    // println!("Small id_it trace: {id_it:?}");
+    let multiplicities = BaseColumn::from_simd(multsis);
+
+    println!("MEMORYID Small values trace: {values_trace:?}");
+    println!("MEMORYID Small id_it trace: {id_it:?}");
+    println!("MEMORYID Small multiplicities trace: {multiplicities:?}");
 
     chain!(values_trace, [id_it], [multiplicities]).collect_vec()
 }
@@ -399,11 +413,12 @@ impl InteractionClaimGenerator {
             let id_and_value: [_; N_M31_IN_SMALL_FELT252 + MEMORY_ID_SIZE] =
                 std::array::from_fn(|i| {
                     if i == 0 {
-                        self.small_ids[i]
+                        self.small_ids[vec_row]
                     } else {
                         self.small_values[i - 1][vec_row]
                     }
                 });
+            println!("SMALL ID AND VALUE: {id_and_value:?}");
             let denom: PackedQM31 = lookup_elements.combine(&id_and_value);
             col_gen.write_frac(vec_row, (-self.small_multiplicities[vec_row]).into(), denom);
         }

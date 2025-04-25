@@ -46,6 +46,7 @@ macro_rules! range_check_prover {
                         value <<= segment_n_bits;
                         value += segment.0;
                     }
+                    println!("Adding input: {:?} Adding value: {}", input, value);
                     self.multiplicities.increase_at(value);
                 }
 
