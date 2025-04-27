@@ -65,7 +65,7 @@ fn run(args: impl Iterator<Item = String>) -> Result<(), Error> {
     // `disable_trace_padding` is set to true as run_and_prove runs the VM in proof mode, and
     // should disable trace padding (this is the mode Stwo uses).
     let cairo_runner = run_vm(&args.vm_args, false)?;
-    let cairo_inputs = adapt_finished_runner_shards(cairo_runner, 100)?;
+    let cairo_inputs = adapt_finished_runner_shards(cairo_runner, 5000)?;
 
     let ProverParameters {
         channel_hash: _,
@@ -76,11 +76,20 @@ fn run(args: impl Iterator<Item = String>) -> Result<(), Error> {
     create_dir_all(&args.proof_path)?;
 
     for (idx, cairo_input) in cairo_inputs.into_iter().enumerate() {
-        println!("{:#?}", cairo_input);
+        log::info!(
+            "STWO Shard {} initial_state: {:?}",
+            idx,
+            cairo_input.state_transitions.initial_state
+        );
+        log::info!(
+            "STWO Shard {} final_state: {:?}",
+            idx,
+            cairo_input.state_transitions.final_state
+        );
 
         let proof =
             prove_cairo::<Blake2sMerkleChannel>(cairo_input, pcs_config, preprocessed_trace)?;
-        log::info!("Shard {} proved successfully", idx);
+        log::info!("STWO Shard {} proved successfully", idx);
 
         std::fs::write(
             args.proof_path.join(format!("shard_proof_{}.json", idx)),
@@ -88,7 +97,7 @@ fn run(args: impl Iterator<Item = String>) -> Result<(), Error> {
         )?;
 
         verify_cairo::<Blake2sMerkleChannel>(proof, pcs_config, preprocessed_trace)?;
-        log::info!("Shard {} verified successfully", idx);
+        log::info!("STWO Shard {} verified successfully", idx);
     }
 
     Ok(())

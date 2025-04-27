@@ -123,11 +123,6 @@ impl ClaimGenerator {
         tree_builder: &mut impl TreeBuilder<SimdBackend>,
     ) -> (Claim, InteractionClaimGenerator) {
         let multiplicities: Vec<PackedM31> = self.multiplicities.into_simd_vec();
-        println!(
-            "multiplicities {} / {}",
-            multiplicities.iter().filter(|f| !f.is_zero()).count(),
-            multiplicities.len()
-        );
 
         // Do not commit to memory cells that are not used by this shard.
         // In sharding scenario this is going to be very common case as most of memory will never be
@@ -138,7 +133,6 @@ impl ClaimGenerator {
             N_LANES,
         );
         let n_packed_rows = size.div_ceil(N_LANES);
-        println!("size: {}, n_packed_rows: {}", size, n_packed_rows);
         let mut trace: [_; N_TRACE_COLUMNS] =
             std::array::from_fn(|_| Col::<SimdBackend, M31>::zeros(size));
 
@@ -162,7 +156,6 @@ impl ClaimGenerator {
         {
             let chunk_idx = i / n_packed_rows;
             let i = i % n_packed_rows;
-            println!("i: {}, chunk_idx: {}", i, chunk_idx);
             trace[chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[i] = id;
             trace[1 + chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[i] = multiplicity;
             trace[2 + chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[i] = address;

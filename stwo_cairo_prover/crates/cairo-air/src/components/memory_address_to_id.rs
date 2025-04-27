@@ -64,8 +64,9 @@ impl FrameworkEval for Eval {
                 &[address, id],
             ));
 
-            // This is right now dummy constraint just to satisfy lookup sums of memory address to id component.
+            // By reading ids from generated trace this constraint does not enforce continuity of memory anymore.
             // TODO: perform memory bus calculations and expose them in final proof.
+
         }
 
         eval.finalize_logup_in_pairs();
