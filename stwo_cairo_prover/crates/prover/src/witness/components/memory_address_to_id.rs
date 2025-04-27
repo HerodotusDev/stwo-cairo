@@ -128,8 +128,9 @@ impl ClaimGenerator {
         // In sharding scenario this is going to be very common case as most of memory will never be
         // read, only addresses that specific to shard cairo-cpu transition set.
         let size = std::cmp::max(
-            (multiplicities.iter()
-            .filter(|f| !f.is_zero()).count() * N_LANES / MEMORY_ADDRESS_TO_ID_SPLIT).next_power_of_two(),
+            (multiplicities.iter().filter(|f| !f.is_zero()).count() * N_LANES
+                / MEMORY_ADDRESS_TO_ID_SPLIT)
+                .next_power_of_two(),
             N_LANES,
         );
         let n_packed_rows = size.div_ceil(N_LANES);
@@ -151,8 +152,9 @@ impl ClaimGenerator {
             });
 
         // Commit only used memory to the trace later used by memory bus air-component.
-        for (i, (id, multiplicity, address)) in
-            izip!(id_it, multiplicities, addresses_it).filter(|(_, m, _)| !m.is_zero()).enumerate()
+        for (i, (id, multiplicity, address)) in izip!(id_it, multiplicities, addresses_it)
+            .filter(|(_, m, _)| !m.is_zero())
+            .enumerate()
         {
             let chunk_idx = i / n_packed_rows;
             let i = i % n_packed_rows;

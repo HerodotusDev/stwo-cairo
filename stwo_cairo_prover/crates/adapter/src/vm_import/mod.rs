@@ -157,14 +157,23 @@ pub fn adapt_to_stwo_input_chunks(
     public_memory_addresses: Vec<u32>,
     _memory_segments: &HashMap<&str, MemorySegmentAddresses>,
 ) -> Result<Vec<ProverInput>, VmImportError> {
-    // let mut builtins_segments = BuiltinSegments::from_memory_segments(memory_segments);
-    // builtins_segments.fill_memory_holes(&mut memory);
-    // builtins_segments.pad_builtin_segments(&mut memory);
-
-    let transitions = trace_chunks_iter
+    let mut chunks = trace_chunks_iter
         .into_iter()
-        .map(|chunk| StateTransitions::from_iter(chunk, &mut memory))
-        .collect::<Vec<_>>();
+        .map(|chunk| chunk.collect::<Vec<_>>());
+
+    let chunk = chunks.next().unwrap();
+    let mut prev_final_state = *chunk.last().unwrap();
+    let mut transitions = vec![StateTransitions::from_iter(chunk.into_iter(), &mut memory)];
+
+    for chunk in chunks {
+        let final_state = *chunk.last().unwrap();
+        let (state_transitions, instruction_by_pc) = StateTransitions::from_iter(
+            vec![prev_final_state].into_iter().chain(chunk.into_iter()),
+            &mut memory,
+        );
+        prev_final_state = final_state;
+        transitions.push((state_transitions, instruction_by_pc));
+    }
 
     let memory = memory.build();
 

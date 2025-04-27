@@ -64,9 +64,9 @@ impl FrameworkEval for Eval {
                 &[address, id],
             ));
 
-            // By reading ids from generated trace this constraint does not enforce continuity of memory anymore.
-            // TODO: perform memory bus calculations and expose them in final proof.
-
+            // By reading ids from generated trace this constraint does not enforce continuity of
+            // memory anymore. TODO: perform memory bus calculations and expose them in
+            // final proof.
         }
 
         eval.finalize_logup_in_pairs();

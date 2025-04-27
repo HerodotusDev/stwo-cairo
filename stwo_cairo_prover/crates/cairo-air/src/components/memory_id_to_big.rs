@@ -137,8 +137,8 @@ impl FrameworkEval for SmallEval {
             &chain!([id], value).collect_vec(),
         ));
 
-        // By reading ids from generated trace this constraint does not enforce continuity of memory anymore.  
-        // TODO: perform memory bus calculations and expose them in final proof.
+        // By reading ids from generated trace this constraint does not enforce continuity of memory
+        // anymore. TODO: perform memory bus calculations and expose them in final proof.
 
         eval.finalize_logup();
         eval

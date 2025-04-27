@@ -237,7 +237,7 @@ fn gen_small_memory_trace(values: Vec<u128>, mults: Vec<PackedM31>) -> Vec<BaseC
                 .into_iter()
                 .map(u128_to_4_limbs)
                 .array_chunks::<N_LANES>(),
-            (0..values_len).into_iter().array_chunks::<N_LANES>(),
+            (0..values_len).array_chunks::<N_LANES>(),
             mults.iter()
         )
         .filter_map(|(v, i, m)| if m.is_zero() { None } else { Some((v, i, m)) })
@@ -278,7 +278,12 @@ fn gen_small_memory_trace(values: Vec<u128>, mults: Vec<PackedM31>) -> Vec<BaseC
     println!("MEMORYID Small id trace: {ids:?}");
     println!("MEMORYID Small multiplicities trace: {multiplicities:?}");
 
-    chain!(values_trace, [BaseColumn::from_simd(ids)], [BaseColumn::from_simd(multiplicities)]).collect_vec()
+    chain!(
+        values_trace,
+        [BaseColumn::from_simd(ids)],
+        [BaseColumn::from_simd(multiplicities)]
+    )
+    .collect_vec()
 }
 
 #[derive(Debug)]
