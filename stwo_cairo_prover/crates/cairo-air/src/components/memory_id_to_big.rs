@@ -84,7 +84,6 @@ impl FrameworkEval for BigEval {
             &chain!([id], value).collect_vec(),
         ));
 
-
         // Claimed sum of `InteractionClaim` (big_claimed_sum field) is a commitment to what was used as a memory in this shard.
         // Its value is verified by the aggregator stage.
         
@@ -141,8 +140,8 @@ impl FrameworkEval for SmallEval {
             &chain!([id], value).collect_vec(),
         ));
 
-
         // Claimed sum of `InteractionClaim` (small_claimed_sum field) is a commitment to what was used as a memory in this shard.
+        // Its value is verified by the aggregator stage.
 
         eval.finalize_logup();
         eval
