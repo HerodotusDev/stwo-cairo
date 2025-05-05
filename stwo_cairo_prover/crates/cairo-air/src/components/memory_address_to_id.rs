@@ -64,9 +64,8 @@ impl FrameworkEval for Eval {
                 &[address, id],
             ));
 
-            // By reading ids from generated trace this constraint does not enforce continuity of
-            // memory anymore. TODO: perform memory bus calculations and expose them in
-            // final proof.
+            // Claimed sum of `InteractionClaim` is a commitment to what was used as a memory in this shard.
+            // Its value is verified by the aggregator stage.
         }
 
         eval.finalize_logup_in_pairs();

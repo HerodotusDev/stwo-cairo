@@ -84,6 +84,10 @@ impl FrameworkEval for BigEval {
             &chain!([id], value).collect_vec(),
         ));
 
+
+        // Claimed sum of `InteractionClaim` (big_claimed_sum field) is a commitment to what was used as a memory in this shard.
+        // Its value is verified by the aggregator stage.
+        
         eval.finalize_logup_in_pairs();
         eval
     }
@@ -137,8 +141,8 @@ impl FrameworkEval for SmallEval {
             &chain!([id], value).collect_vec(),
         ));
 
-        // By reading ids from generated trace this constraint does not enforce continuity of memory
-        // anymore. TODO: perform memory bus calculations and expose them in final proof.
+
+        // Claimed sum of `InteractionClaim` (small_claimed_sum field) is a commitment to what was used as a memory in this shard.
 
         eval.finalize_logup();
         eval
