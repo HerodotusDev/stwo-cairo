@@ -7,6 +7,7 @@ use std::path::Path;
 use bytemuck::{bytes_of_mut, Pod, Zeroable};
 use cairo_vm::air_public_input::{MemorySegmentAddresses, PublicInput, PublicInputError};
 use cairo_vm::stdlib::collections::HashMap;
+use itertools::IntoChunks;
 use json::PrivateInput;
 use stwo_cairo_common::memory::MEMORY_ADDRESS_BOUND;
 use thiserror::Error;
@@ -145,6 +146,47 @@ pub fn adapt_to_stwo_input(
         public_memory_addresses,
         builtins_segments,
     })
+}
+
+/// Creates continuations Cairo input for Stwo, utilized by:
+/// - `adapt_vm_output` in the prover.
+/// - `adapt_finished_runner` in the validator.
+pub fn adapt_to_stwo_input_chunks(
+    trace_chunks_iter: IntoChunks<impl Iterator<Item = RelocatedTraceEntry>>,
+    mut memory: MemoryBuilder,
+    public_memory_addresses: Vec<u32>,
+    _memory_segments: &HashMap<&str, MemorySegmentAddresses>,
+) -> Result<Vec<ProverInput>, VmImportError> {
+    let mut chunks = trace_chunks_iter
+        .into_iter()
+        .map(|chunk| chunk.collect::<Vec<_>>());
+
+    let chunk = chunks.next().unwrap();
+    let mut prev_final_state = *chunk.last().unwrap();
+    let mut transitions = vec![StateTransitions::from_iter(chunk.into_iter(), &mut memory)];
+
+    for chunk in chunks {
+        let final_state = *chunk.last().unwrap();
+        let (state_transitions, instruction_by_pc) = StateTransitions::from_iter(
+            vec![prev_final_state].into_iter().chain(chunk.into_iter()),
+            &mut memory,
+        );
+        prev_final_state = final_state;
+        transitions.push((state_transitions, instruction_by_pc));
+    }
+
+    let memory = memory.build();
+
+    Ok(transitions
+        .into_iter()
+        .map(|(state_transitions, instruction_by_pc)| ProverInput {
+            state_transitions,
+            instruction_by_pc,
+            memory: memory.to_owned(),
+            public_memory_addresses: public_memory_addresses.to_owned(),
+            builtins_segments: BuiltinSegments::default(),
+        })
+        .collect())
 }
 
 /// A single entry from the trace file.
