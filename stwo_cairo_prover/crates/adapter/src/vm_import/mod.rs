@@ -7,6 +7,7 @@ use std::path::Path;
 use bytemuck::{bytes_of_mut, Pod, Zeroable};
 use cairo_vm::air_public_input::{PublicInput, PublicInputError};
 use cairo_vm::stdlib::collections::HashMap;
+use itertools::{IntoChunks, Itertools};
 use json::PrivateInput;
 use stwo_cairo_common::memory::MEMORY_ADDRESS_BOUND;
 use thiserror::Error;
@@ -154,6 +155,121 @@ pub fn adapt_to_stwo_input(
         public_memory_addresses,
         builtins_segments,
     })
+}
+
+/// Adapts the VM's output files to the Cairo input of the prover.
+/// TODO(Stav): delete when 'adapt_prover_input_info_vm_output' is used.
+pub fn adapt_vm_output_shards(
+    public_input_json: &Path,
+    private_input_json: &Path,
+    shard_size: usize,
+) -> Result<Vec<ProverInput>, VmImportError> {
+    let _span = span!(Level::INFO, "adapt_vm_output_shards").entered();
+
+    let (public_input_string, private_input_string) = (
+        read_to_string(public_input_json).unwrap_or_else(|_| {
+            panic!(
+                "Unable to read public input file at path {}",
+                public_input_json.display()
+            )
+        }),
+        read_to_string(private_input_json).unwrap_or_else(|_| {
+            panic!(
+                "Unable to read private input file at path {}",
+                private_input_json.display()
+            )
+        }),
+    );
+    let (public_input, private_input) =
+        deserialize_inputs(&public_input_string, &private_input_string)?;
+
+    let end_addr = public_input
+        .memory_segments
+        .values()
+        .map(|v| v.stop_ptr)
+        .max()
+        .ok_or(VmImportError::NoMemorySegments)?;
+    assert!(end_addr < MEMORY_ADDRESS_BOUND);
+
+    let memory_path = private_input_json
+        .parent()
+        .unwrap()
+        .join(&private_input.memory_path);
+    let trace_path = private_input_json
+        .parent()
+        .unwrap()
+        .join(&private_input.trace_path);
+
+    let mut memory_file =
+        std::io::BufReader::new(File::open(memory_path.as_path()).unwrap_or_else(|_| {
+            panic!(
+                "Unable to open memory file at path {}",
+                memory_path.display()
+            )
+        }));
+    let mut trace_file =
+        std::io::BufReader::new(File::open(trace_path.as_path()).unwrap_or_else(|_| {
+            panic!("Unable to open trace file at path {}", trace_path.display())
+        }));
+
+    let public_memory_addresses = public_input
+        .public_memory
+        .iter()
+        .map(|entry| entry.address as u32)
+        .collect();
+    let res = adapt_to_stwo_input_shards(
+        TraceIter(&mut trace_file).into_iter().skip(5).chunks(shard_size),
+        MemoryBuilder::from_iter(MemoryConfig::default(), MemoryEntryIter(&mut memory_file)),
+        public_memory_addresses,
+        &public_input
+            .memory_segments
+            .into_iter()
+            .map(|(k, v)| (k, v.into()))
+            .collect(),
+    );
+    res
+}
+
+/// Creates Cairo input for Stwo, utilized by:
+/// - `adapt_vm_output` in the prover.
+/// - `adapt_finished_runner` in the validator. TODO(Stav): delete when
+///   'adapt_prover_input_info_vm_output' is used.
+pub fn adapt_to_stwo_input_shards(
+    trace_chunks_iter: IntoChunks<impl Iterator<Item = RelocatedTraceEntry>>,
+    mut memory: MemoryBuilder,
+    public_memory_addresses: Vec<u32>,
+    _memory_segments: &HashMap<&str, MemorySegmentAddresses>,
+) -> Result<Vec<ProverInput>, VmImportError> {
+    let mut chunks = trace_chunks_iter
+        .into_iter()
+        .map(|chunk| chunk.collect::<Vec<_>>());
+
+    let chunk = chunks.next().unwrap();
+    let mut prev_final_state = *chunk.last().unwrap();
+    let mut transitions = vec![StateTransitions::from_iter(chunk.into_iter(), &mut memory)];
+
+    for chunk in chunks {
+        let final_state = *chunk.last().unwrap();
+        let (state_transitions, instruction_by_pc) = StateTransitions::from_iter(
+            vec![prev_final_state].into_iter().chain(chunk.into_iter()),
+            &mut memory,
+        );
+        prev_final_state = final_state;
+        transitions.push((state_transitions, instruction_by_pc));
+    }
+
+    let memory = memory.build();
+
+    Ok(transitions
+        .into_iter()
+        .map(|(state_transitions, instruction_by_pc)| ProverInput {
+            state_transitions,
+            instruction_by_pc,
+            memory: memory.to_owned(),
+            public_memory_addresses: public_memory_addresses.to_owned(),
+            builtins_segments: BuiltinSegments::default(),
+        })
+        .collect())
 }
 
 /// A single entry from the trace file.

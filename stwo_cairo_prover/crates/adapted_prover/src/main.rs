@@ -6,7 +6,7 @@ use cairo_air::verifier::{verify_cairo, CairoVerificationError};
 use cairo_air::PreProcessedTraceVariant;
 use clap::Parser;
 use serde::Serialize;
-use stwo_cairo_adapter::vm_import::{adapt_vm_output, VmImportError};
+use stwo_cairo_adapter::vm_import::{adapt_vm_output_shards, VmImportError};
 use stwo_cairo_adapter::ProverInput;
 use stwo_cairo_prover::prover::{
     default_prod_prover_parameters, prove_cairo, ChannelHash, ProverParameters,
@@ -115,13 +115,8 @@ fn run(args: impl Iterator<Item = String>) -> Result<(), Error> {
     let _span = span!(Level::INFO, "run").entered();
     let args = Args::try_parse_from(args)?;
 
-    let vm_output: ProverInput =
-        adapt_vm_output(args.pub_json.as_path(), args.priv_json.as_path())?;
-
-    log::info!(
-        "Casm states by opcode:\n{}",
-        vm_output.state_transitions.casm_states_by_opcode
-    );
+    let vm_outputs: Vec<ProverInput> =
+        adapt_vm_output_shards(args.pub_json.as_path(), args.priv_json.as_path(), 30)?;
 
     let ProverParameters {
         channel_hash,
@@ -137,14 +132,31 @@ fn run(args: impl Iterator<Item = String>) -> Result<(), Error> {
         ChannelHash::Poseidon252 => run_inner::<Poseidon252MerkleChannel>,
     };
 
-    run_inner_fn(
-        vm_output,
-        pcs_config,
-        preprocessed_trace,
-        args.verify,
-        args.proof_path,
-        args.proof_format,
-    )?;
+    std::fs::create_dir_all(&args.proof_path)?;
+
+    for (idx, vm_output) in vm_outputs.into_iter().enumerate() {
+        log::info!(
+            "STWO Shard {} initial_state: {:?}",
+            idx,
+            vm_output.state_transitions.initial_state
+        );
+        log::info!(
+            "STWO Shard {} final_state: {:?}",
+            idx,
+            vm_output.state_transitions.final_state
+        );
+
+        println!("vm_output: {:?}", vm_output);
+
+        run_inner_fn(
+            vm_output,
+            pcs_config,
+            preprocessed_trace,
+            args.verify,
+            args.proof_path.join(format!("shard_proof_{}.json", idx)),
+            args.proof_format.clone(),
+        )?;
+    }
 
     Ok(())
 }
