@@ -1,9 +1,10 @@
+use std::fs::create_dir_all;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use cairo_air::verifier::{verify_cairo, CairoVerificationError};
 use clap::Parser;
-use stwo_cairo_adapter::plain::adapt_finished_runner;
+use stwo_cairo_adapter::plain::adapt_finished_runner_shards;
 use stwo_cairo_adapter::vm_import::VmImportError;
 use stwo_cairo_prover::prover::{default_prod_prover_parameters, prove_cairo, ProverParameters};
 use stwo_cairo_utils::binary_utils::run_binary;
@@ -63,13 +64,8 @@ fn run(args: impl Iterator<Item = String>) -> Result<(), Error> {
 
     // `disable_trace_padding` is set to true as run_and_prove runs the VM in proof mode, and
     // should disable trace padding (this is the mode Stwo uses).
-    let cairo_runner = run_vm(&args.vm_args, true)?;
-    let cairo_input = adapt_finished_runner(cairo_runner)?;
-
-    log::info!(
-        "Casm states by opcode:\n{}",
-        cairo_input.state_transitions.casm_states_by_opcode
-    );
+    let cairo_runner = run_vm(&args.vm_args, false)?;
+    let cairo_inputs = adapt_finished_runner_shards(cairo_runner, 1000)?;
 
     let ProverParameters {
         channel_hash: _,
@@ -77,14 +73,31 @@ fn run(args: impl Iterator<Item = String>) -> Result<(), Error> {
         preprocessed_trace,
     } = default_prod_prover_parameters();
 
-    // TODO(Ohad): Propagate hash from CLI args.
-    let proof = prove_cairo::<Blake2sMerkleChannel>(cairo_input, pcs_config, preprocessed_trace)?;
+    create_dir_all(&args.proof_path)?;
 
-    std::fs::write(args.proof_path, serde_json::to_string(&proof)?)?;
+    for (idx, cairo_input) in cairo_inputs.into_iter().enumerate() {
+        log::info!(
+            "STWO Shard {} initial_state: {:?}",
+            idx,
+            cairo_input.state_transitions.initial_state
+        );
+        log::info!(
+            "STWO Shard {} final_state: {:?}",
+            idx,
+            cairo_input.state_transitions.final_state
+        );
 
-    if args.verify {
+        let proof =
+            prove_cairo::<Blake2sMerkleChannel>(cairo_input, pcs_config, preprocessed_trace)?;
+        log::info!("STWO Shard {} proved successfully", idx);
+
+        std::fs::write(
+            args.proof_path.join(format!("shard_proof_{}.json", idx)),
+            serde_json::to_string(&proof)?,
+        )?;
+
         verify_cairo::<Blake2sMerkleChannel>(proof, pcs_config, preprocessed_trace)?;
-        log::info!("Proof verified successfully");
+        log::info!("STWO Shard {} verified successfully", idx);
     }
 
     Ok(())
