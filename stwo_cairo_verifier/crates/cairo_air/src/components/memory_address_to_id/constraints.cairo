@@ -37,6 +37,14 @@ pub fn mask_points(
     trace_mask_points.append(array![point]);
     trace_mask_points.append(array![point]);
     trace_mask_points.append(array![point]);
+    trace_mask_points.append(array![point]);
+    trace_mask_points.append(array![point]);
+    trace_mask_points.append(array![point]);
+    trace_mask_points.append(array![point]);
+    trace_mask_points.append(array![point]);
+    trace_mask_points.append(array![point]);
+    trace_mask_points.append(array![point]);
+    trace_mask_points.append(array![point]);
     interaction_trace_mask_points.append(array![point]);
     interaction_trace_mask_points.append(array![point]);
     interaction_trace_mask_points.append(array![point]);
