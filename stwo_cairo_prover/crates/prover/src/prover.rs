@@ -175,7 +175,7 @@ pub fn default_prod_prover_parameters() -> ProverParameters {
                 n_queries: 70,
             },
         },
-        preprocessed_trace: PreProcessedTraceVariant::Canonical,
+        preprocessed_trace: PreProcessedTraceVariant::CanonicalWithoutPedersen,
     }
 }
 
