@@ -37,6 +37,14 @@ pub fn mask_points(
     trace_mask_points.append(array![point]);
     trace_mask_points.append(array![point]);
     trace_mask_points.append(array![point]);
+    trace_mask_points.append(array![point]);
+    trace_mask_points.append(array![point]);
+    trace_mask_points.append(array![point]);
+    trace_mask_points.append(array![point]);
+    trace_mask_points.append(array![point]);
+    trace_mask_points.append(array![point]);
+    trace_mask_points.append(array![point]);
+    trace_mask_points.append(array![point]);
     interaction_trace_mask_points.append(array![point]);
     interaction_trace_mask_points.append(array![point]);
     interaction_trace_mask_points.append(array![point]);
@@ -98,7 +106,15 @@ pub fn evaluate_constraints_at_point(
         trace_1_column_13,
         trace_1_column_14,
         trace_1_column_15,
-    ]: [Span<QM31>; 16] =
+        trace_1_column_16,
+        trace_1_column_17,
+        trace_1_column_18,
+        trace_1_column_19,
+        trace_1_column_20,
+        trace_1_column_21,
+        trace_1_column_22,
+        trace_1_column_23,
+    ]: [Span<QM31>; 24] =
         (*trace_mask_values
         .multi_pop_front()
         .unwrap())
@@ -135,6 +151,22 @@ pub fn evaluate_constraints_at_point(
     let [trace_1_column_14_offset_0]: [QM31; 1] = (*trace_1_column_14.try_into().unwrap()).unbox();
 
     let [trace_1_column_15_offset_0]: [QM31; 1] = (*trace_1_column_15.try_into().unwrap()).unbox();
+
+    let [trace_1_column_16_offset_0]: [QM31; 1] = (*trace_1_column_16.try_into().unwrap()).unbox();
+
+    let [trace_1_column_17_offset_0]: [QM31; 1] = (*trace_1_column_17.try_into().unwrap()).unbox();
+
+    let [trace_1_column_18_offset_0]: [QM31; 1] = (*trace_1_column_18.try_into().unwrap()).unbox();
+
+    let [trace_1_column_19_offset_0]: [QM31; 1] = (*trace_1_column_19.try_into().unwrap()).unbox();
+
+    let [trace_1_column_20_offset_0]: [QM31; 1] = (*trace_1_column_20.try_into().unwrap()).unbox();
+
+    let [trace_1_column_21_offset_0]: [QM31; 1] = (*trace_1_column_21.try_into().unwrap()).unbox();
+
+    let [trace_1_column_22_offset_0]: [QM31; 1] = (*trace_1_column_22.try_into().unwrap()).unbox();
+
+    let [trace_1_column_23_offset_0]: [QM31; 1] = (*trace_1_column_23.try_into().unwrap()).unbox();
 
     let [
         trace_2_column_16,
@@ -215,14 +247,21 @@ pub fn evaluate_constraints_at_point(
         MemoryAddressToId_z,
         seq,
         trace_1_column_0_offset_0,
-        trace_1_column_10_offset_0,
-        trace_1_column_12_offset_0,
-        trace_1_column_14_offset_0,
         trace_1_column_2_offset_0,
-        trace_1_column_4_offset_0,
+        trace_1_column_3_offset_0,
+        trace_1_column_5_offset_0,
         trace_1_column_6_offset_0,
         trace_1_column_8_offset_0,
-        log_size,
+        trace_1_column_9_offset_0,
+        trace_1_column_11_offset_0,
+        trace_1_column_12_offset_0,
+        trace_1_column_14_offset_0,
+        trace_1_column_15_offset_0,
+        trace_1_column_17_offset_0,
+        trace_1_column_18_offset_0,
+        trace_1_column_20_offset_0,
+        trace_1_column_21_offset_0,
+        trace_1_column_23_offset_0,
     )
         .span();
     let intermediate0 = *intermediates.pop_front().unwrap();
@@ -243,7 +282,7 @@ pub fn evaluate_constraints_at_point(
     ))
         * ((intermediate0) * (intermediate1))
         - ((intermediate1) * (-(trace_1_column_1_offset_0))
-            + (intermediate0) * (-(trace_1_column_3_offset_0))))
+            + (intermediate0) * (-(trace_1_column_4_offset_0))))
         * domain_vanish_at_point_inv;
     sum = sum * random_coeff + constraint_quotient;
 
@@ -261,8 +300,8 @@ pub fn evaluate_constraints_at_point(
             ],
         )))
         * ((intermediate2) * (intermediate3))
-        - ((intermediate3) * (-(trace_1_column_5_offset_0))
-            + (intermediate2) * (-(trace_1_column_7_offset_0))))
+        - ((intermediate3) * (-(trace_1_column_7_offset_0))
+            + (intermediate2) * (-(trace_1_column_10_offset_0))))
         * domain_vanish_at_point_inv;
     sum = sum * random_coeff + constraint_quotient;
 
@@ -280,8 +319,8 @@ pub fn evaluate_constraints_at_point(
             ],
         )))
         * ((intermediate4) * (intermediate5))
-        - ((intermediate5) * (-(trace_1_column_9_offset_0))
-            + (intermediate4) * (-(trace_1_column_11_offset_0))))
+        - ((intermediate5) * (-(trace_1_column_13_offset_0))
+            + (intermediate4) * (-(trace_1_column_16_offset_0))))
         * domain_vanish_at_point_inv;
     sum = sum * random_coeff + constraint_quotient;
 
@@ -306,8 +345,8 @@ pub fn evaluate_constraints_at_point(
         ))
         + (claimed_sum) * (m31(pow2(log_size)).inverse().into()))
         * ((intermediate6) * (intermediate7))
-        - ((intermediate7) * (-(trace_1_column_13_offset_0))
-            + (intermediate6) * (-(trace_1_column_15_offset_0))))
+        - ((intermediate7) * (-(trace_1_column_19_offset_0))
+            + (intermediate6) * (-(trace_1_column_22_offset_0))))
         * domain_vanish_at_point_inv;
     sum = sum * random_coeff + constraint_quotient;
 }
@@ -318,21 +357,29 @@ fn intermediates(
     MemoryAddressToId_alpha1: QM31,
     MemoryAddressToId_z: QM31,
     seq: QM31,
-    trace_1_column_0_offset_0: QM31,
-    trace_1_column_10_offset_0: QM31,
-    trace_1_column_12_offset_0: QM31,
-    trace_1_column_14_offset_0: QM31,
-    trace_1_column_2_offset_0: QM31,
-    trace_1_column_4_offset_0: QM31,
-    trace_1_column_6_offset_0: QM31,
-    trace_1_column_8_offset_0: QM31,
-    log_size: u32,
+    trace_1_column_0_offset_0: QM31, // id0
+    trace_1_column_2_offset_0: QM31, // addr0
+    trace_1_column_3_offset_0: QM31, // id1
+    trace_1_column_5_offset_0: QM31, // addr1
+    trace_1_column_6_offset_0: QM31, // id2
+    trace_1_column_8_offset_0: QM31, // addr2
+    trace_1_column_9_offset_0: QM31, // id3
+    trace_1_column_11_offset_0: QM31, // addr3
+    trace_1_column_12_offset_0: QM31, // id4
+    trace_1_column_14_offset_0: QM31, // addr4
+    trace_1_column_15_offset_0: QM31, // id5
+    trace_1_column_17_offset_0: QM31, // addr5
+    trace_1_column_18_offset_0: QM31, // id6
+    trace_1_column_20_offset_0: QM31, // addr6
+    trace_1_column_21_offset_0: QM31, // id7
+    trace_1_column_23_offset_0: QM31 // addr7
 ) -> Array<QM31> {
     let intermediate0 = intermediate0(
         MemoryAddressToId_alpha0,
         MemoryAddressToId_alpha1,
         MemoryAddressToId_z,
         seq,
+        trace_1_column_2_offset_0,
         trace_1_column_0_offset_0,
     );
 
@@ -341,8 +388,8 @@ fn intermediates(
         MemoryAddressToId_alpha1,
         MemoryAddressToId_z,
         seq,
-        trace_1_column_2_offset_0,
-        log_size,
+        trace_1_column_3_offset_0,
+        trace_1_column_5_offset_0,
     );
 
     let intermediate2 = intermediate2(
@@ -350,8 +397,8 @@ fn intermediates(
         MemoryAddressToId_alpha1,
         MemoryAddressToId_z,
         seq,
-        trace_1_column_4_offset_0,
-        log_size,
+        trace_1_column_6_offset_0,
+        trace_1_column_8_offset_0,
     );
 
     let intermediate3 = intermediate3(
@@ -359,8 +406,8 @@ fn intermediates(
         MemoryAddressToId_alpha1,
         MemoryAddressToId_z,
         seq,
-        trace_1_column_6_offset_0,
-        log_size,
+        trace_1_column_9_offset_0,
+        trace_1_column_11_offset_0,
     );
 
     let intermediate4 = intermediate4(
@@ -368,8 +415,8 @@ fn intermediates(
         MemoryAddressToId_alpha1,
         MemoryAddressToId_z,
         seq,
-        trace_1_column_8_offset_0,
-        log_size,
+        trace_1_column_12_offset_0,
+        trace_1_column_14_offset_0,
     );
 
     let intermediate5 = intermediate5(
@@ -377,8 +424,8 @@ fn intermediates(
         MemoryAddressToId_alpha1,
         MemoryAddressToId_z,
         seq,
-        trace_1_column_10_offset_0,
-        log_size,
+        trace_1_column_15_offset_0,
+        trace_1_column_17_offset_0,
     );
 
     let intermediate6 = intermediate6(
@@ -386,8 +433,8 @@ fn intermediates(
         MemoryAddressToId_alpha1,
         MemoryAddressToId_z,
         seq,
-        trace_1_column_12_offset_0,
-        log_size,
+        trace_1_column_18_offset_0,
+        trace_1_column_20_offset_0,
     );
 
     let intermediate7 = intermediate7(
@@ -395,8 +442,8 @@ fn intermediates(
         MemoryAddressToId_alpha1,
         MemoryAddressToId_z,
         seq,
-        trace_1_column_14_offset_0,
-        log_size,
+        trace_1_column_21_offset_0,
+        trace_1_column_23_offset_0,
     );
     array![
         intermediate0,
@@ -417,9 +464,10 @@ pub fn intermediate0(
     MemoryAddressToId_z: QM31,
     seq: QM31,
     trace_1_column_0_offset_0: QM31,
+    trace_1_column_2_offset_0: QM31,
 ) -> QM31 {
-    (MemoryAddressToId_alpha0) * (seq + m31(1).into())
-        + (MemoryAddressToId_alpha1) * (trace_1_column_0_offset_0)
+    (MemoryAddressToId_alpha0) * (trace_1_column_0_offset_0)
+        + (MemoryAddressToId_alpha1) * (trace_1_column_2_offset_0)
         - (MemoryAddressToId_z)
 }
 
@@ -428,11 +476,11 @@ pub fn intermediate1(
     MemoryAddressToId_alpha1: QM31,
     MemoryAddressToId_z: QM31,
     seq: QM31,
-    trace_1_column_2_offset_0: QM31,
-    log_size: u32,
+    trace_1_column_3_offset_0: QM31,
+    trace_1_column_5_offset_0: QM31,
 ) -> QM31 {
-    (MemoryAddressToId_alpha0) * (seq + m31(1).into() + m31(pow2(log_size)).into())
-        + (MemoryAddressToId_alpha1) * (trace_1_column_2_offset_0)
+    (MemoryAddressToId_alpha0) * (trace_1_column_3_offset_0)
+        + (MemoryAddressToId_alpha1) * (trace_1_column_5_offset_0)
         - (MemoryAddressToId_z)
 }
 
@@ -441,11 +489,11 @@ pub fn intermediate2(
     MemoryAddressToId_alpha1: QM31,
     MemoryAddressToId_z: QM31,
     seq: QM31,
-    trace_1_column_4_offset_0: QM31,
-    log_size: u32,
+    trace_1_column_6_offset_0: QM31,
+    trace_1_column_8_offset_0: QM31,
 ) -> QM31 {
-    (MemoryAddressToId_alpha0) * (seq + m31(1).into() + m31(pow2(log_size) * 2).into())
-        + (MemoryAddressToId_alpha1) * (trace_1_column_4_offset_0)
+    (MemoryAddressToId_alpha0) * (trace_1_column_6_offset_0)
+        + (MemoryAddressToId_alpha1) * (trace_1_column_8_offset_0)
         - (MemoryAddressToId_z)
 }
 
@@ -454,11 +502,11 @@ pub fn intermediate3(
     MemoryAddressToId_alpha1: QM31,
     MemoryAddressToId_z: QM31,
     seq: QM31,
-    trace_1_column_6_offset_0: QM31,
-    log_size: u32,
+    trace_1_column_9_offset_0: QM31,
+    trace_1_column_11_offset_0: QM31,
 ) -> QM31 {
-    (MemoryAddressToId_alpha0) * (seq + m31(1).into() + m31(pow2(log_size) * 3).into())
-        + (MemoryAddressToId_alpha1) * (trace_1_column_6_offset_0)
+    (MemoryAddressToId_alpha0) * (trace_1_column_9_offset_0)
+        + (MemoryAddressToId_alpha1) * (trace_1_column_11_offset_0)
         - (MemoryAddressToId_z)
 }
 
@@ -467,11 +515,11 @@ pub fn intermediate4(
     MemoryAddressToId_alpha1: QM31,
     MemoryAddressToId_z: QM31,
     seq: QM31,
-    trace_1_column_8_offset_0: QM31,
-    log_size: u32,
+    trace_1_column_12_offset_0: QM31,
+    trace_1_column_14_offset_0: QM31,
 ) -> QM31 {
-    (MemoryAddressToId_alpha0) * (seq + m31(1).into() + m31(pow2(log_size) * 4).into())
-        + (MemoryAddressToId_alpha1) * (trace_1_column_8_offset_0)
+    (MemoryAddressToId_alpha0) * (trace_1_column_12_offset_0)
+        + (MemoryAddressToId_alpha1) * (trace_1_column_14_offset_0)
         - (MemoryAddressToId_z)
 }
 
@@ -480,11 +528,11 @@ pub fn intermediate5(
     MemoryAddressToId_alpha1: QM31,
     MemoryAddressToId_z: QM31,
     seq: QM31,
-    trace_1_column_10_offset_0: QM31,
-    log_size: u32,
+    trace_1_column_15_offset_0: QM31,
+    trace_1_column_17_offset_0: QM31,
 ) -> QM31 {
-    (MemoryAddressToId_alpha0) * (seq + m31(1).into() + m31(pow2(log_size) * 5).into())
-        + (MemoryAddressToId_alpha1) * (trace_1_column_10_offset_0)
+    (MemoryAddressToId_alpha0) * (trace_1_column_15_offset_0)
+        + (MemoryAddressToId_alpha1) * (trace_1_column_17_offset_0)
         - (MemoryAddressToId_z)
 }
 
@@ -493,11 +541,11 @@ pub fn intermediate6(
     MemoryAddressToId_alpha1: QM31,
     MemoryAddressToId_z: QM31,
     seq: QM31,
-    trace_1_column_12_offset_0: QM31,
-    log_size: u32,
+    trace_1_column_18_offset_0: QM31,
+    trace_1_column_20_offset_0: QM31,
 ) -> QM31 {
-    (MemoryAddressToId_alpha0) * (seq + m31(1).into() + m31(pow2(log_size) * 6).into())
-        + (MemoryAddressToId_alpha1) * (trace_1_column_12_offset_0)
+    (MemoryAddressToId_alpha0) * (trace_1_column_18_offset_0)
+        + (MemoryAddressToId_alpha1) * (trace_1_column_20_offset_0)
         - (MemoryAddressToId_z)
 }
 
@@ -506,11 +554,11 @@ pub fn intermediate7(
     MemoryAddressToId_alpha1: QM31,
     MemoryAddressToId_z: QM31,
     seq: QM31,
-    trace_1_column_14_offset_0: QM31,
-    log_size: u32,
+    trace_1_column_21_offset_0: QM31,
+    trace_1_column_23_offset_0: QM31,
 ) -> QM31 {
-    (MemoryAddressToId_alpha0) * (seq + m31(1).into() + m31(pow2(log_size) * 7).into())
-        + (MemoryAddressToId_alpha1) * (trace_1_column_14_offset_0)
+    (MemoryAddressToId_alpha0) * (trace_1_column_21_offset_0)
+        + (MemoryAddressToId_alpha1) * (trace_1_column_23_offset_0)
         - (MemoryAddressToId_z)
 }
 
