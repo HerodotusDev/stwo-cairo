@@ -6,10 +6,11 @@ use ruint::Uint;
 use serde::{Deserialize, Serialize};
 use starknet_ff::FieldElement;
 use starknet_types_core::felt::Felt as StarknetTypesFelt;
-use stwo_cairo_serialize::CairoSerialize;
+use stwo::core::channel::Channel;
+use stwo_cairo_serialize::{CairoDeserialize, CairoSerialize};
 
-pub type M31 = stwo_prover::core::fields::m31::M31;
-pub type QM31 = stwo_prover::core::fields::qm31::QM31;
+pub type M31 = stwo::core::fields::m31::M31;
+pub type QM31 = stwo::core::fields::qm31::QM31;
 
 pub const PRIME: u32 = 2_u32.pow(31) - 1;
 
@@ -47,7 +48,17 @@ impl ProverType for M31 {
 }
 
 #[derive(
-    Copy, Clone, Debug, Serialize, Deserialize, Default, Eq, PartialEq, Hash, CairoSerialize,
+    Copy,
+    Clone,
+    Debug,
+    Serialize,
+    Deserialize,
+    Default,
+    Eq,
+    PartialEq,
+    Hash,
+    CairoSerialize,
+    CairoDeserialize,
 )]
 pub struct CasmState {
     pub pc: M31,
@@ -58,6 +69,11 @@ pub struct CasmState {
 impl CasmState {
     pub fn values(&self) -> [M31; 3] {
         [self.pc, self.ap, self.fp]
+    }
+    pub fn mix_into(&self, channel: &mut impl Channel) {
+        channel.mix_u64(self.pc.0 as u64);
+        channel.mix_u64(self.ap.0 as u64);
+        channel.mix_u64(self.fp.0 as u64);
     }
 }
 

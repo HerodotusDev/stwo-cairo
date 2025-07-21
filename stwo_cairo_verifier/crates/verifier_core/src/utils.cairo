@@ -1,47 +1,51 @@
 use core::array::SpanTrait;
 use core::box::BoxTrait;
-use core::dict::{Felt252Dict, Felt252DictEntryTrait, Felt252DictTrait};
+use core::dict::{Felt252Dict, Felt252DictEntryTrait, Felt252DictTrait, SquashedFelt252DictTrait};
 use core::iter::{IntoIterator, Iterator};
+use core::nullable::{FromNullableResult, NullableTrait, match_nullable, null};
 use core::num::traits::{BitSize, WrappingMul, WrappingSub};
 use core::traits::{DivRem, PanicDestruct};
-use crate::fields::m31::{M31InnerT, M31_SHIFT};
+use crate::circle::M31_CIRCLE_LOG_ORDER;
+use crate::fields::m31::{M31, M31_SHIFT};
+use crate::{TreeArray, TreeSpan};
 
 /// Returns `2^n`.
 #[inline(always)]
 pub fn pow2(n: u32) -> u32 {
     /// Look up table where index `i` stores value `2^i`.
+    #[cairofmt::skip]
     const POW_2: [u32; 32] = [
-        0b1, // 
-        0b10, //
-        0b100, //
-        0b1000, //
-        0b10000, //
-        0b100000, //
-        0b1000000, //
-        0b10000000, //
-        0b100000000, //
-        0b1000000000, //
-        0b10000000000, //
-        0b100000000000, //
-        0b1000000000000, //
-        0b10000000000000, //
-        0b100000000000000, //
-        0b1000000000000000, //
-        0b10000000000000000, //
-        0b100000000000000000, //
-        0b1000000000000000000, //
-        0b10000000000000000000, //
-        0b100000000000000000000, //
-        0b1000000000000000000000, //
-        0b10000000000000000000000, //
-        0b100000000000000000000000, //
-        0b1000000000000000000000000, //
-        0b10000000000000000000000000, //
-        0b100000000000000000000000000, //
-        0b1000000000000000000000000000, //
-        0b10000000000000000000000000000, //
-        0b100000000000000000000000000000, //
-        0b1000000000000000000000000000000, //
+        0b1,
+        0b10,
+        0b100,
+        0b1000,
+        0b10000,
+        0b100000,
+        0b1000000,
+        0b10000000,
+        0b100000000,
+        0b1000000000,
+        0b10000000000,
+        0b100000000000,
+        0b1000000000000,
+        0b10000000000000,
+        0b100000000000000,
+        0b1000000000000000,
+        0b10000000000000000,
+        0b100000000000000000,
+        0b1000000000000000000,
+        0b10000000000000000000,
+        0b100000000000000000000,
+        0b1000000000000000000000,
+        0b10000000000000000000000,
+        0b100000000000000000000000,
+        0b1000000000000000000000000,
+        0b10000000000000000000000000,
+        0b100000000000000000000000000,
+        0b1000000000000000000000000000,
+        0b10000000000000000000000000000,
+        0b100000000000000000000000000000,
+        0b1000000000000000000000000000000,
         0b10000000000000000000000000000000,
     ];
 
@@ -96,56 +100,6 @@ pub impl ArrayImpl<T, +Drop<T>> of ArrayExTrait<T> {
         self.span().max()
     }
 
-    /// Sorts an array in ascending order. Uses quicksort algorithm.
-    fn sort_ascending<+Clone<T>, +PartialOrd<T>>(self: Array<T>) -> Array<T> {
-        if self.len() <= 1 {
-            return self;
-        }
-
-        let mut lhs = array![];
-        let mut rhs = array![];
-        let mut iter = self.into_iter();
-        let pivot = iter.next().unwrap();
-
-        for v in iter {
-            if v.clone() >= pivot.clone() {
-                rhs.append(v);
-            } else {
-                lhs.append(v);
-            }
-        }
-
-        let mut res = lhs.sort_ascending();
-        res.append(pivot);
-
-        for v in rhs.sort_ascending() {
-            res.append(v);
-        }
-
-        res
-    }
-
-    /// Removes consecutive repeated elements.
-    ///
-    /// If the vector is sorted, this removes all duplicates.
-    fn dedup<+PartialEq<T>>(self: Array<T>) -> Array<T> {
-        if self.len() == 0 {
-            return array![];
-        }
-
-        let mut iter = self.into_iter();
-        let mut res = array![iter.next().unwrap()];
-        let mut last_value = res[0];
-        for value in iter {
-            if @value != last_value {
-                last_value = @value;
-                res.append(value);
-            }
-        }
-
-        res
-    }
-
     fn new_repeated<+Clone<T>>(n: usize, v: T) -> Array<T> {
         let mut res = array![];
         for _ in 0..n {
@@ -191,13 +145,9 @@ pub impl SpanImpl<T> of SpanExTrait<T> {
 
     fn max<+PartialOrd<T>, +Copy<T>>(mut self: Span<T>) -> Option<@T> {
         let mut max = self.pop_front()?;
-        loop {
-            if let Some(next) = self.pop_front() {
-                if *next > *max {
-                    max = next;
-                }
-            } else {
-                break;
+        while let Some(next) = self.pop_front() {
+            if *next > *max {
+                max = next;
             }
         }
         Some(max)
@@ -206,7 +156,7 @@ pub impl SpanImpl<T> of SpanExTrait<T> {
 
 // Packs 4 BaseField values and "append" to a felt252.
 // The resulting felt252 is: cur || x0 || x1 || x2 || x3.
-pub fn pack4(cur: felt252, values: [M31InnerT; 4]) -> felt252 {
+pub fn pack4(cur: felt252, values: [M31; 4]) -> felt252 {
     let [x0, x1, x2, x3] = values;
     (((cur * M31_SHIFT + x0.into()) * M31_SHIFT + x1.into()) * M31_SHIFT + x2.into()) * M31_SHIFT
         + x3.into()
@@ -228,72 +178,115 @@ pub fn bit_reverse_index(mut index: usize, mut bits: u32) -> usize {
 }
 
 /// Generates a bit mask with the least significant `n_bits` set to 1.
-pub fn gen_bit_mask(n_bits: u32) -> u128 {
-    assert!(n_bits <= 128);
-    let mut mask = 1;
-    for _ in 0..n_bits {
-        mask = mask.wrapping_mul(2);
-    }
-    mask = mask.wrapping_sub(1);
-    mask
+pub fn gen_bit_mask(n_bits: u32) -> u64 {
+    /// Look up table where index `i` stores a bit mask with the least significant `i` bits set to
+    /// 1.
+    #[cairofmt::skip]
+    const BIT_MASKS: [u64; 65] = [
+        0b0,
+        0b1,
+        0b11,
+        0b111,
+        0b1111,
+        0b11111,
+        0b111111,
+        0b1111111,
+        0b11111111,
+        0b111111111,
+        0b1111111111,
+        0b11111111111,
+        0b111111111111,
+        0b1111111111111,
+        0b11111111111111,
+        0b111111111111111,
+        0b1111111111111111,
+        0b11111111111111111,
+        0b111111111111111111,
+        0b1111111111111111111,
+        0b11111111111111111111,
+        0b111111111111111111111,
+        0b1111111111111111111111,
+        0b11111111111111111111111,
+        0b111111111111111111111111,
+        0b1111111111111111111111111,
+        0b11111111111111111111111111,
+        0b111111111111111111111111111,
+        0b1111111111111111111111111111,
+        0b11111111111111111111111111111,
+        0b111111111111111111111111111111,
+        0b1111111111111111111111111111111,
+        0b11111111111111111111111111111111,
+        0b111111111111111111111111111111111,
+        0b1111111111111111111111111111111111,
+        0b11111111111111111111111111111111111,
+        0b111111111111111111111111111111111111,
+        0b1111111111111111111111111111111111111,
+        0b11111111111111111111111111111111111111,
+        0b111111111111111111111111111111111111111,
+        0b1111111111111111111111111111111111111111,
+        0b11111111111111111111111111111111111111111,
+        0b111111111111111111111111111111111111111111,
+        0b1111111111111111111111111111111111111111111,
+        0b11111111111111111111111111111111111111111111,
+        0b111111111111111111111111111111111111111111111,
+        0b1111111111111111111111111111111111111111111111,
+        0b11111111111111111111111111111111111111111111111,
+        0b111111111111111111111111111111111111111111111111,
+        0b1111111111111111111111111111111111111111111111111,
+        0b11111111111111111111111111111111111111111111111111,
+        0b111111111111111111111111111111111111111111111111111,
+        0b1111111111111111111111111111111111111111111111111111,
+        0b11111111111111111111111111111111111111111111111111111,
+        0b111111111111111111111111111111111111111111111111111111,
+        0b1111111111111111111111111111111111111111111111111111111,
+        0b11111111111111111111111111111111111111111111111111111111,
+        0b111111111111111111111111111111111111111111111111111111111,
+        0b1111111111111111111111111111111111111111111111111111111111,
+        0b11111111111111111111111111111111111111111111111111111111111,
+        0b111111111111111111111111111111111111111111111111111111111111,
+        0b1111111111111111111111111111111111111111111111111111111111111,
+        0b11111111111111111111111111111111111111111111111111111111111111,
+        0b111111111111111111111111111111111111111111111111111111111111111,
+        0b1111111111111111111111111111111111111111111111111111111111111111
+        ];
+
+    *BIT_MASKS.span()[n_bits]
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{ArrayImpl, bit_reverse_index, gen_bit_mask};
-
-    #[test]
-    fn test_bit_reverse() {
-        // 1 bit
-        assert_eq!(0, bit_reverse_index(0, 1));
-        assert_eq!(1, bit_reverse_index(1, 1));
-
-        // 2 bits
-        assert_eq!(0, bit_reverse_index(0, 2));
-        assert_eq!(2, bit_reverse_index(1, 2));
-        assert_eq!(1, bit_reverse_index(2, 2));
-        assert_eq!(3, bit_reverse_index(3, 2));
-
-        // 3 bits
-        assert_eq!(0, bit_reverse_index(0, 3));
-        assert_eq!(4, bit_reverse_index(1, 3));
-        assert_eq!(2, bit_reverse_index(2, 3));
-        assert_eq!(6, bit_reverse_index(3, 3));
-
-        // 16 bits
-        assert_eq!(24415, bit_reverse_index(64250, 16));
-
-        // 31 bits
-        assert_eq!(16448250, bit_reverse_index(800042880, 31));
+/// Given a span of column log sizes, Return a span of the column indicies grouped by their log
+/// size.
+///
+/// # Arguments
+///
+/// * `column_log_sizes`: The log sizes of the columns.
+///
+/// # Returns
+///
+/// * `columns_by_log_size`: A span where the i'th element is a span of the column indices of size
+/// 2**i.
+pub fn group_columns_by_log_size(column_log_sizes: Span<u32>) -> Span<Span<usize>> {
+    let mut columns_by_log_size = Default::default();
+    let mut col_index = 0_usize;
+    for col_size in column_log_sizes {
+        let (columns_by_log_size_entry, value) = columns_by_log_size.entry((*col_size).into());
+        let mut columns_of_size = match match_nullable(value) {
+            FromNullableResult::Null => array![],
+            FromNullableResult::NotNull(value) => value.unbox(),
+        };
+        columns_of_size.append(col_index);
+        columns_by_log_size = columns_by_log_size_entry
+            .finalize(NullableTrait::new(columns_of_size));
+        col_index += 1;
     }
 
-    #[test]
-    fn test_sort_ascending() {
-        assert_eq!(array![6_usize, 5, 1, 4, 2, 3].sort_ascending(), array![1, 2, 3, 4, 5, 6]);
+    let mut res = array![];
+    let empty_span = array![].span();
+    for (columns_log_size, _, columns) in columns_by_log_size.squash().into_entries() {
+        /// Add empty spans for missing log sizes.
+        while res.len().into() != columns_log_size {
+            res.append(empty_span);
+        }
+        res.append(columns.deref().span());
     }
-
-    #[test]
-    fn test_dedup() {
-        assert_eq!(array![1_usize, 1, 1, 2, 2, 3, 4, 5, 5, 5].dedup(), array![1, 2, 3, 4, 5]);
-    }
-
-    #[test]
-    fn test_array_new_repeated() {
-        assert_eq!(ArrayImpl::new_repeated(n: 5, v: 3_usize), array![3, 3, 3, 3, 3]);
-    }
-
-    #[test]
-    fn test_gen_bit_mask_with_0_bits() {
-        assert_eq!(gen_bit_mask(0), 0);
-    }
-
-    #[test]
-    fn test_gen_bit_mask_with_8_bits() {
-        assert_eq!(gen_bit_mask(8), 0b11111111);
-    }
-
-    #[test]
-    fn test_gen_bit_mask_with_128_bits() {
-        assert_eq!(gen_bit_mask(128), 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF);
-    }
+    res.span()
 }

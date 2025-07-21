@@ -1,7 +1,7 @@
 use crate::components::prelude::*;
 use crate::components::subroutines::decode_instruction_df7a6::DecodeInstructionDf7A6;
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct DecodeGenericInstruction {}
 
 impl DecodeGenericInstruction {
@@ -12,7 +12,7 @@ impl DecodeGenericInstruction {
     #[allow(unused_variables)]
     #[allow(clippy::too_many_arguments)]
     pub fn evaluate<E: EvalAtRow>(
-        decode_generic_instruction_input: E::F,
+        [decode_generic_instruction_input]: [E::F; 1],
         offset0_col0: E::F,
         offset1_col1: E::F,
         offset2_col2: E::F,
@@ -31,14 +31,14 @@ impl DecodeGenericInstruction {
         opcode_call_col15: E::F,
         opcode_ret_col16: E::F,
         opcode_assert_eq_col17: E::F,
-        eval: &mut E,
         verify_instruction_lookup_elements: &relations::VerifyInstruction,
-    ) -> [E::F; 23] {
+        eval: &mut E,
+    ) -> [E::F; 8] {
         let M31_1 = E::F::from(M31::from(1));
 
-        let [decode_instruction_df7a6_output_tmp_62f3c_20_limb_0, decode_instruction_df7a6_output_tmp_62f3c_20_limb_1, decode_instruction_df7a6_output_tmp_62f3c_20_limb_2, decode_instruction_df7a6_output_tmp_62f3c_20_limb_3, decode_instruction_df7a6_output_tmp_62f3c_20_limb_4, decode_instruction_df7a6_output_tmp_62f3c_20_limb_5, decode_instruction_df7a6_output_tmp_62f3c_20_limb_6, decode_instruction_df7a6_output_tmp_62f3c_20_limb_7, decode_instruction_df7a6_output_tmp_62f3c_20_limb_8, decode_instruction_df7a6_output_tmp_62f3c_20_limb_9, decode_instruction_df7a6_output_tmp_62f3c_20_limb_10, decode_instruction_df7a6_output_tmp_62f3c_20_limb_11, decode_instruction_df7a6_output_tmp_62f3c_20_limb_12, decode_instruction_df7a6_output_tmp_62f3c_20_limb_13, decode_instruction_df7a6_output_tmp_62f3c_20_limb_14, decode_instruction_df7a6_output_tmp_62f3c_20_limb_15, decode_instruction_df7a6_output_tmp_62f3c_20_limb_16, decode_instruction_df7a6_output_tmp_62f3c_20_limb_17, decode_instruction_df7a6_output_tmp_62f3c_20_limb_18] =
+        let [decode_instruction_df7a6_output_tmp_62f3c_20_offset0, decode_instruction_df7a6_output_tmp_62f3c_20_offset1, decode_instruction_df7a6_output_tmp_62f3c_20_offset2] =
             DecodeInstructionDf7A6::evaluate(
-                decode_generic_instruction_input.clone(),
+                [decode_generic_instruction_input.clone()],
                 offset0_col0.clone(),
                 offset1_col1.clone(),
                 offset2_col2.clone(),
@@ -57,8 +57,8 @@ impl DecodeGenericInstruction {
                 opcode_call_col15.clone(),
                 opcode_ret_col16.clone(),
                 opcode_assert_eq_col17.clone(),
-                eval,
                 verify_instruction_lookup_elements,
+                eval,
             );
         let op1_base_op0_tmp_62f3c_21 = eval.add_intermediate(
             (((M31_1.clone() - op1_imm_col5.clone()) - op1_base_fp_col6.clone())
@@ -104,29 +104,14 @@ impl DecodeGenericInstruction {
                 * (M31_1.clone() - fp_update_regular_tmp_62f3c_25.clone())),
         );
         [
-            dst_base_fp_col3.clone(),
-            op0_base_fp_col4.clone(),
-            op1_imm_col5.clone(),
-            op1_base_fp_col6.clone(),
-            op1_base_ap_col7.clone(),
-            res_add_col8.clone(),
-            res_mul_col9.clone(),
-            pc_update_jump_col10.clone(),
-            pc_update_jump_rel_col11.clone(),
-            pc_update_jnz_col12.clone(),
-            ap_update_add_col13.clone(),
-            ap_update_add_1_col14.clone(),
-            opcode_call_col15.clone(),
-            opcode_ret_col16.clone(),
-            opcode_assert_eq_col17.clone(),
             op1_base_op0_tmp_62f3c_21.clone(),
             res_op1_tmp_62f3c_22.clone(),
             pc_update_regular_tmp_62f3c_23.clone(),
             fp_update_regular_tmp_62f3c_25.clone(),
             (M31_1.clone() + op1_imm_col5.clone()),
-            decode_instruction_df7a6_output_tmp_62f3c_20_limb_0.clone(),
-            decode_instruction_df7a6_output_tmp_62f3c_20_limb_1.clone(),
-            decode_instruction_df7a6_output_tmp_62f3c_20_limb_2.clone(),
+            decode_instruction_df7a6_output_tmp_62f3c_20_offset0.clone(),
+            decode_instruction_df7a6_output_tmp_62f3c_20_offset1.clone(),
+            decode_instruction_df7a6_output_tmp_62f3c_20_offset2.clone(),
         ]
     }
 }

@@ -2,6 +2,32 @@ use crate::components::prelude::*;
 use crate::components::subroutines::poseidon_partial_round::PoseidonPartialRound;
 
 pub const N_TRACE_COLUMNS: usize = 169;
+pub const RELATION_USES_PER_ROW: [RelationUse; 6] = [
+    RelationUse {
+        relation_id: "Cube252",
+        uses: 3,
+    },
+    RelationUse {
+        relation_id: "Poseidon3PartialRoundsChain",
+        uses: 1,
+    },
+    RelationUse {
+        relation_id: "PoseidonRoundKeys",
+        uses: 1,
+    },
+    RelationUse {
+        relation_id: "RangeCheckFelt252Width27",
+        uses: 3,
+    },
+    RelationUse {
+        relation_id: "RangeCheck_4_4",
+        uses: 3,
+    },
+    RelationUse {
+        relation_id: "RangeCheck_4_4_4_4",
+        uses: 6,
+    },
+];
 
 pub struct Eval {
     pub claim: Claim,
@@ -13,7 +39,7 @@ pub struct Eval {
     pub poseidon_3_partial_rounds_chain_lookup_elements: relations::Poseidon3PartialRoundsChain,
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct Claim {
     pub log_size: u32,
 }
@@ -29,7 +55,7 @@ impl Claim {
     }
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct InteractionClaim {
     pub claimed_sum: SecureField,
 }
@@ -267,7 +293,7 @@ impl FrameworkEval for Eval {
 
         #[allow(clippy::unused_unit)]
         #[allow(unused_variables)]
-        let [poseidon_partial_round_output_tmp_44f04_36_limb_0, poseidon_partial_round_output_tmp_44f04_36_limb_1, poseidon_partial_round_output_tmp_44f04_36_limb_2, poseidon_partial_round_output_tmp_44f04_36_limb_3, poseidon_partial_round_output_tmp_44f04_36_limb_4, poseidon_partial_round_output_tmp_44f04_36_limb_5, poseidon_partial_round_output_tmp_44f04_36_limb_6, poseidon_partial_round_output_tmp_44f04_36_limb_7, poseidon_partial_round_output_tmp_44f04_36_limb_8, poseidon_partial_round_output_tmp_44f04_36_limb_9, poseidon_partial_round_output_tmp_44f04_36_limb_10, poseidon_partial_round_output_tmp_44f04_36_limb_11, poseidon_partial_round_output_tmp_44f04_36_limb_12, poseidon_partial_round_output_tmp_44f04_36_limb_13, poseidon_partial_round_output_tmp_44f04_36_limb_14, poseidon_partial_round_output_tmp_44f04_36_limb_15, poseidon_partial_round_output_tmp_44f04_36_limb_16, poseidon_partial_round_output_tmp_44f04_36_limb_17, poseidon_partial_round_output_tmp_44f04_36_limb_18, poseidon_partial_round_output_tmp_44f04_36_limb_19, poseidon_partial_round_output_tmp_44f04_36_limb_20, poseidon_partial_round_output_tmp_44f04_36_limb_21, poseidon_partial_round_output_tmp_44f04_36_limb_22, poseidon_partial_round_output_tmp_44f04_36_limb_23, poseidon_partial_round_output_tmp_44f04_36_limb_24, poseidon_partial_round_output_tmp_44f04_36_limb_25, poseidon_partial_round_output_tmp_44f04_36_limb_26, poseidon_partial_round_output_tmp_44f04_36_limb_27, poseidon_partial_round_output_tmp_44f04_36_limb_28, poseidon_partial_round_output_tmp_44f04_36_limb_29, poseidon_partial_round_output_tmp_44f04_36_limb_30, poseidon_partial_round_output_tmp_44f04_36_limb_31, poseidon_partial_round_output_tmp_44f04_36_limb_32, poseidon_partial_round_output_tmp_44f04_36_limb_33, poseidon_partial_round_output_tmp_44f04_36_limb_34, poseidon_partial_round_output_tmp_44f04_36_limb_35, poseidon_partial_round_output_tmp_44f04_36_limb_36, poseidon_partial_round_output_tmp_44f04_36_limb_37, poseidon_partial_round_output_tmp_44f04_36_limb_38, poseidon_partial_round_output_tmp_44f04_36_limb_39] =
+        let [poseidon_partial_round_output_tmp_44f04_36_limb_0, poseidon_partial_round_output_tmp_44f04_36_limb_1, poseidon_partial_round_output_tmp_44f04_36_limb_2, poseidon_partial_round_output_tmp_44f04_36_limb_3, poseidon_partial_round_output_tmp_44f04_36_limb_4, poseidon_partial_round_output_tmp_44f04_36_limb_5, poseidon_partial_round_output_tmp_44f04_36_limb_6, poseidon_partial_round_output_tmp_44f04_36_limb_7, poseidon_partial_round_output_tmp_44f04_36_limb_8, poseidon_partial_round_output_tmp_44f04_36_limb_9, poseidon_partial_round_output_tmp_44f04_36_limb_10, poseidon_partial_round_output_tmp_44f04_36_limb_11, poseidon_partial_round_output_tmp_44f04_36_limb_12, poseidon_partial_round_output_tmp_44f04_36_limb_13, poseidon_partial_round_output_tmp_44f04_36_limb_14, poseidon_partial_round_output_tmp_44f04_36_limb_15, poseidon_partial_round_output_tmp_44f04_36_limb_16, poseidon_partial_round_output_tmp_44f04_36_limb_17, poseidon_partial_round_output_tmp_44f04_36_limb_18, poseidon_partial_round_output_tmp_44f04_36_limb_19] =
             PoseidonPartialRound::evaluate(
                 [
                     input_limb_2_col2.clone(),
@@ -353,15 +379,15 @@ impl FrameworkEval for Eval {
                 combination_limb_8_col101.clone(),
                 combination_limb_9_col102.clone(),
                 p_coef_col103.clone(),
-                &mut eval,
                 &self.cube_252_lookup_elements,
                 &self.range_check_4_4_4_4_lookup_elements,
                 &self.range_check_4_4_lookup_elements,
                 &self.range_check_felt_252_width_27_lookup_elements,
+                &mut eval,
             );
         #[allow(clippy::unused_unit)]
         #[allow(unused_variables)]
-        let [poseidon_partial_round_output_tmp_44f04_72_limb_0, poseidon_partial_round_output_tmp_44f04_72_limb_1, poseidon_partial_round_output_tmp_44f04_72_limb_2, poseidon_partial_round_output_tmp_44f04_72_limb_3, poseidon_partial_round_output_tmp_44f04_72_limb_4, poseidon_partial_round_output_tmp_44f04_72_limb_5, poseidon_partial_round_output_tmp_44f04_72_limb_6, poseidon_partial_round_output_tmp_44f04_72_limb_7, poseidon_partial_round_output_tmp_44f04_72_limb_8, poseidon_partial_round_output_tmp_44f04_72_limb_9, poseidon_partial_round_output_tmp_44f04_72_limb_10, poseidon_partial_round_output_tmp_44f04_72_limb_11, poseidon_partial_round_output_tmp_44f04_72_limb_12, poseidon_partial_round_output_tmp_44f04_72_limb_13, poseidon_partial_round_output_tmp_44f04_72_limb_14, poseidon_partial_round_output_tmp_44f04_72_limb_15, poseidon_partial_round_output_tmp_44f04_72_limb_16, poseidon_partial_round_output_tmp_44f04_72_limb_17, poseidon_partial_round_output_tmp_44f04_72_limb_18, poseidon_partial_round_output_tmp_44f04_72_limb_19, poseidon_partial_round_output_tmp_44f04_72_limb_20, poseidon_partial_round_output_tmp_44f04_72_limb_21, poseidon_partial_round_output_tmp_44f04_72_limb_22, poseidon_partial_round_output_tmp_44f04_72_limb_23, poseidon_partial_round_output_tmp_44f04_72_limb_24, poseidon_partial_round_output_tmp_44f04_72_limb_25, poseidon_partial_round_output_tmp_44f04_72_limb_26, poseidon_partial_round_output_tmp_44f04_72_limb_27, poseidon_partial_round_output_tmp_44f04_72_limb_28, poseidon_partial_round_output_tmp_44f04_72_limb_29, poseidon_partial_round_output_tmp_44f04_72_limb_30, poseidon_partial_round_output_tmp_44f04_72_limb_31, poseidon_partial_round_output_tmp_44f04_72_limb_32, poseidon_partial_round_output_tmp_44f04_72_limb_33, poseidon_partial_round_output_tmp_44f04_72_limb_34, poseidon_partial_round_output_tmp_44f04_72_limb_35, poseidon_partial_round_output_tmp_44f04_72_limb_36, poseidon_partial_round_output_tmp_44f04_72_limb_37, poseidon_partial_round_output_tmp_44f04_72_limb_38, poseidon_partial_round_output_tmp_44f04_72_limb_39] =
+        let [poseidon_partial_round_output_tmp_44f04_72_limb_0, poseidon_partial_round_output_tmp_44f04_72_limb_1, poseidon_partial_round_output_tmp_44f04_72_limb_2, poseidon_partial_round_output_tmp_44f04_72_limb_3, poseidon_partial_round_output_tmp_44f04_72_limb_4, poseidon_partial_round_output_tmp_44f04_72_limb_5, poseidon_partial_round_output_tmp_44f04_72_limb_6, poseidon_partial_round_output_tmp_44f04_72_limb_7, poseidon_partial_round_output_tmp_44f04_72_limb_8, poseidon_partial_round_output_tmp_44f04_72_limb_9, poseidon_partial_round_output_tmp_44f04_72_limb_10, poseidon_partial_round_output_tmp_44f04_72_limb_11, poseidon_partial_round_output_tmp_44f04_72_limb_12, poseidon_partial_round_output_tmp_44f04_72_limb_13, poseidon_partial_round_output_tmp_44f04_72_limb_14, poseidon_partial_round_output_tmp_44f04_72_limb_15, poseidon_partial_round_output_tmp_44f04_72_limb_16, poseidon_partial_round_output_tmp_44f04_72_limb_17, poseidon_partial_round_output_tmp_44f04_72_limb_18, poseidon_partial_round_output_tmp_44f04_72_limb_19] =
             PoseidonPartialRound::evaluate(
                 [
                     input_limb_22_col22.clone(),
@@ -447,15 +473,15 @@ impl FrameworkEval for Eval {
                 combination_limb_8_col133.clone(),
                 combination_limb_9_col134.clone(),
                 p_coef_col135.clone(),
-                &mut eval,
                 &self.cube_252_lookup_elements,
                 &self.range_check_4_4_4_4_lookup_elements,
                 &self.range_check_4_4_lookup_elements,
                 &self.range_check_felt_252_width_27_lookup_elements,
+                &mut eval,
             );
         #[allow(clippy::unused_unit)]
         #[allow(unused_variables)]
-        let [poseidon_partial_round_output_tmp_44f04_108_limb_0, poseidon_partial_round_output_tmp_44f04_108_limb_1, poseidon_partial_round_output_tmp_44f04_108_limb_2, poseidon_partial_round_output_tmp_44f04_108_limb_3, poseidon_partial_round_output_tmp_44f04_108_limb_4, poseidon_partial_round_output_tmp_44f04_108_limb_5, poseidon_partial_round_output_tmp_44f04_108_limb_6, poseidon_partial_round_output_tmp_44f04_108_limb_7, poseidon_partial_round_output_tmp_44f04_108_limb_8, poseidon_partial_round_output_tmp_44f04_108_limb_9, poseidon_partial_round_output_tmp_44f04_108_limb_10, poseidon_partial_round_output_tmp_44f04_108_limb_11, poseidon_partial_round_output_tmp_44f04_108_limb_12, poseidon_partial_round_output_tmp_44f04_108_limb_13, poseidon_partial_round_output_tmp_44f04_108_limb_14, poseidon_partial_round_output_tmp_44f04_108_limb_15, poseidon_partial_round_output_tmp_44f04_108_limb_16, poseidon_partial_round_output_tmp_44f04_108_limb_17, poseidon_partial_round_output_tmp_44f04_108_limb_18, poseidon_partial_round_output_tmp_44f04_108_limb_19, poseidon_partial_round_output_tmp_44f04_108_limb_20, poseidon_partial_round_output_tmp_44f04_108_limb_21, poseidon_partial_round_output_tmp_44f04_108_limb_22, poseidon_partial_round_output_tmp_44f04_108_limb_23, poseidon_partial_round_output_tmp_44f04_108_limb_24, poseidon_partial_round_output_tmp_44f04_108_limb_25, poseidon_partial_round_output_tmp_44f04_108_limb_26, poseidon_partial_round_output_tmp_44f04_108_limb_27, poseidon_partial_round_output_tmp_44f04_108_limb_28, poseidon_partial_round_output_tmp_44f04_108_limb_29, poseidon_partial_round_output_tmp_44f04_108_limb_30, poseidon_partial_round_output_tmp_44f04_108_limb_31, poseidon_partial_round_output_tmp_44f04_108_limb_32, poseidon_partial_round_output_tmp_44f04_108_limb_33, poseidon_partial_round_output_tmp_44f04_108_limb_34, poseidon_partial_round_output_tmp_44f04_108_limb_35, poseidon_partial_round_output_tmp_44f04_108_limb_36, poseidon_partial_round_output_tmp_44f04_108_limb_37, poseidon_partial_round_output_tmp_44f04_108_limb_38, poseidon_partial_round_output_tmp_44f04_108_limb_39] =
+        let [poseidon_partial_round_output_tmp_44f04_108_limb_0, poseidon_partial_round_output_tmp_44f04_108_limb_1, poseidon_partial_round_output_tmp_44f04_108_limb_2, poseidon_partial_round_output_tmp_44f04_108_limb_3, poseidon_partial_round_output_tmp_44f04_108_limb_4, poseidon_partial_round_output_tmp_44f04_108_limb_5, poseidon_partial_round_output_tmp_44f04_108_limb_6, poseidon_partial_round_output_tmp_44f04_108_limb_7, poseidon_partial_round_output_tmp_44f04_108_limb_8, poseidon_partial_round_output_tmp_44f04_108_limb_9, poseidon_partial_round_output_tmp_44f04_108_limb_10, poseidon_partial_round_output_tmp_44f04_108_limb_11, poseidon_partial_round_output_tmp_44f04_108_limb_12, poseidon_partial_round_output_tmp_44f04_108_limb_13, poseidon_partial_round_output_tmp_44f04_108_limb_14, poseidon_partial_round_output_tmp_44f04_108_limb_15, poseidon_partial_round_output_tmp_44f04_108_limb_16, poseidon_partial_round_output_tmp_44f04_108_limb_17, poseidon_partial_round_output_tmp_44f04_108_limb_18, poseidon_partial_round_output_tmp_44f04_108_limb_19] =
             PoseidonPartialRound::evaluate(
                 [
                     cube_252_output_limb_0_col72.clone(),
@@ -541,11 +567,11 @@ impl FrameworkEval for Eval {
                 combination_limb_8_col165.clone(),
                 combination_limb_9_col166.clone(),
                 p_coef_col167.clone(),
-                &mut eval,
                 &self.cube_252_lookup_elements,
                 &self.range_check_4_4_4_4_lookup_elements,
                 &self.range_check_4_4_lookup_elements,
                 &self.range_check_felt_252_width_27_lookup_elements,
+                &mut eval,
             );
         eval.add_to_relation(RelationEntry::new(
             &self.poseidon_3_partial_rounds_chain_lookup_elements,
@@ -655,8 +681,8 @@ mod tests {
     use num_traits::Zero;
     use rand::rngs::SmallRng;
     use rand::{Rng, SeedableRng};
-    use stwo_prover::constraint_framework::expr::ExprEvaluator;
-    use stwo_prover::core::fields::qm31::QM31;
+    use stwo::core::fields::qm31::QM31;
+    use stwo_constraint_framework::expr::ExprEvaluator;
 
     use super::*;
     use crate::components::constraints_regression_test_values::POSEIDON_3_PARTIAL_ROUNDS_CHAIN;

@@ -9,16 +9,16 @@ use cairo_air::relations;
 use itertools::{izip, Itertools};
 use num_traits::Zero;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use stwo::core::fields::m31::{BaseField, M31};
+use stwo::core::poly::circle::CanonicCoset;
+use stwo::prover::backend::simd::m31::{PackedBaseField, PackedM31, LOG_N_LANES, N_LANES};
+use stwo::prover::backend::simd::qm31::PackedQM31;
+use stwo::prover::backend::simd::SimdBackend;
+use stwo::prover::backend::{Col, Column};
+use stwo::prover::poly::circle::CircleEvaluation;
+use stwo::prover::poly::BitReversedOrder;
 use stwo_cairo_adapter::memory::Memory;
-use stwo_prover::constraint_framework::logup::LogupTraceGenerator;
-use stwo_prover::constraint_framework::Relation;
-use stwo_prover::core::backend::simd::m31::{PackedBaseField, PackedM31, LOG_N_LANES, N_LANES};
-use stwo_prover::core::backend::simd::qm31::PackedQM31;
-use stwo_prover::core::backend::simd::SimdBackend;
-use stwo_prover::core::backend::{Col, Column};
-use stwo_prover::core::fields::m31::{BaseField, M31};
-use stwo_prover::core::poly::circle::{CanonicCoset, CircleEvaluation};
-use stwo_prover::core::poly::BitReversedOrder;
+use stwo_constraint_framework::{LogupTraceGenerator, Relation};
 
 use crate::witness::utils::{AtomicMultiplicityColumn, TreeBuilder};
 
@@ -245,15 +245,15 @@ impl InteractionClaimGenerator {
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
+    use stwo::core::fields::m31::{BaseField, M31};
     use stwo_cairo_adapter::memory::{MemoryBuilder, MemoryConfig, MemoryEntry};
-    use stwo_prover::core::fields::m31::{BaseField, M31};
 
     use crate::witness::components::memory_address_to_id;
 
     #[test]
     fn test_memory_multiplicities() {
         const N_ENTRIES: u32 = 10;
-        let memory = MemoryBuilder::from_iter(
+        let (memory, ..) = MemoryBuilder::from_iter(
             MemoryConfig::default(),
             (0..N_ENTRIES).map(|i| MemoryEntry {
                 address: i as u64,

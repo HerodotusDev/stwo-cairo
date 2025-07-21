@@ -1,14 +1,14 @@
 use num_traits::Zero;
-use stwo_prover::constraint_framework::TraceLocationAllocator;
-use stwo_prover::core::air::ComponentProver;
-use stwo_prover::core::backend::simd::SimdBackend;
-use stwo_prover::core::fields::qm31::QM31;
+use stwo::core::fields::qm31::QM31;
+use stwo::prover::backend::simd::SimdBackend;
+use stwo::prover::ComponentProver;
+use stwo_constraint_framework::TraceLocationAllocator;
 
-use crate::air::CairoInteractionElements;
+use crate::air::{accumulate_relation_uses, CairoInteractionElements, RelationUsesDict};
 use crate::components::prelude::*;
 use crate::components::{indented_component_display, partial_ec_mul, pedersen_points_table};
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct PedersenContextClaim {
     pub claim: Option<Claim>,
 }
@@ -25,9 +25,15 @@ impl PedersenContextClaim {
             .map(|claim| claim.log_sizes())
             .unwrap_or_default()
     }
+
+    pub fn accumulate_relation_uses(&self, relation_uses: &mut RelationUsesDict) {
+        if let Some(claim) = &self.claim {
+            claim.accumulate_relation_uses(relation_uses);
+        }
+    }
 }
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct Claim {
     pub partial_ec_mul: partial_ec_mul::Claim,
     pub pedersen_points_table: pedersen_points_table::Claim,
@@ -47,9 +53,25 @@ impl Claim {
 
         TreeVec::concat_cols(log_sizes)
     }
+
+    pub fn accumulate_relation_uses(&self, relation_uses: &mut RelationUsesDict) {
+        let Self {
+            partial_ec_mul,
+            pedersen_points_table: _,
+        } = self;
+
+        // NOTE: The following components do not USE relations:
+        // - pedersen_points_table
+
+        accumulate_relation_uses(
+            relation_uses,
+            partial_ec_mul::RELATION_USES_PER_ROW,
+            partial_ec_mul.log_size,
+        );
+    }
 }
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct PedersenContextInteractionClaim {
     pub claim: Option<InteractionClaim>,
 }
@@ -68,7 +90,7 @@ impl PedersenContextInteractionClaim {
     }
 }
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct InteractionClaim {
     pub partial_ec_mul: partial_ec_mul::InteractionClaim,
     pub pedersen_points_table: pedersen_points_table::InteractionClaim,
@@ -141,7 +163,42 @@ impl Components {
                     .pedersen_points_table
                     .clone(),
                 range_check_19_lookup_elements: interaction_elements.range_checks.rc_19.clone(),
+                range_check_19_b_lookup_elements: interaction_elements.range_checks.rc_19_b.clone(),
+                range_check_19_c_lookup_elements: interaction_elements.range_checks.rc_19_c.clone(),
+                range_check_19_d_lookup_elements: interaction_elements.range_checks.rc_19_d.clone(),
+                range_check_19_e_lookup_elements: interaction_elements.range_checks.rc_19_e.clone(),
+                range_check_19_f_lookup_elements: interaction_elements.range_checks.rc_19_f.clone(),
+                range_check_19_g_lookup_elements: interaction_elements.range_checks.rc_19_g.clone(),
+                range_check_19_h_lookup_elements: interaction_elements.range_checks.rc_19_h.clone(),
                 range_check_9_9_lookup_elements: interaction_elements.range_checks.rc_9_9.clone(),
+                range_check_9_9_b_lookup_elements: interaction_elements
+                    .range_checks
+                    .rc_9_9_b
+                    .clone(),
+                range_check_9_9_c_lookup_elements: interaction_elements
+                    .range_checks
+                    .rc_9_9_c
+                    .clone(),
+                range_check_9_9_d_lookup_elements: interaction_elements
+                    .range_checks
+                    .rc_9_9_d
+                    .clone(),
+                range_check_9_9_e_lookup_elements: interaction_elements
+                    .range_checks
+                    .rc_9_9_e
+                    .clone(),
+                range_check_9_9_f_lookup_elements: interaction_elements
+                    .range_checks
+                    .rc_9_9_f
+                    .clone(),
+                range_check_9_9_g_lookup_elements: interaction_elements
+                    .range_checks
+                    .rc_9_9_g
+                    .clone(),
+                range_check_9_9_h_lookup_elements: interaction_elements
+                    .range_checks
+                    .rc_9_9_h
+                    .clone(),
             },
             interaction_claim.partial_ec_mul.claimed_sum,
         );

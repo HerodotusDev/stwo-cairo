@@ -17,13 +17,14 @@ pub type PackedInputType = (PackedM31, [PackedM31; 3], [PackedM31; 2], PackedM31
 #[derive(Default)]
 pub struct ClaimGenerator {
     /// pc -> encoded instruction.
-    instructions: HashMap<M31, u128>,
+    instructions: HashMap<u32, u128>,
 
     /// pc -> multiplicity.
-    multiplicities: HashMap<M31, AtomicU32>,
+    multiplicities: HashMap<u32, AtomicU32>,
 }
 impl ClaimGenerator {
-    pub fn new(instructions: HashMap<M31, u128>) -> Self {
+    pub fn new(instructions: Vec<(u32, u128)>) -> Self {
+        let instructions = HashMap::from_iter(instructions);
         let keys = instructions.keys().copied();
         let mut multiplicities = HashMap::with_capacity(keys.len());
         multiplicities.extend(keys.zip(std::iter::repeat_with(|| AtomicU32::new(0))));
@@ -42,7 +43,6 @@ impl ClaimGenerator {
         range_check_4_3_state: &range_check_4_3::ClaimGenerator,
         range_check_7_2_5_state: &range_check_7_2_5::ClaimGenerator,
     ) -> (Claim, InteractionClaimGenerator) {
-        // TODO(Ohad): use opcode_extension as it is used in stwo-air-cairo.
         let (mut inputs, mut mults) = self
             .multiplicities
             .into_iter()
@@ -51,7 +51,7 @@ impl ClaimGenerator {
                 let (offsets, flags, opcode_extension) =
                     deconstruct_instruction(*self.instructions.get(&pc).unwrap());
                 let multiplicity = M31(multiplicity.into_inner());
-                ((pc, offsets, flags, opcode_extension), multiplicity)
+                ((M31(pc), offsets, flags, opcode_extension), multiplicity)
             })
             .unzip::<_, _, Vec<_>, Vec<_>>();
         let n_rows = inputs.len();
@@ -122,7 +122,7 @@ impl ClaimGenerator {
     // Instruction is determined by PC.
     pub fn add_input(&self, (pc, ..): &InputType) {
         self.multiplicities
-            .get(pc)
+            .get(&pc.0)
             .unwrap()
             .fetch_add(1, Ordering::Relaxed);
     }

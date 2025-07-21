@@ -1,15 +1,19 @@
 use core::array::ArrayTrait;
 use core::hash::HashStateTrait;
+use core::num::traits::Zero;
 use core::poseidon::{HashState, hades_permutation, poseidon_hash_span};
 use crate::BaseField;
 use crate::fields::m31::M31_SHIFT;
 use super::hasher::MerkleHasher;
 
-/// 8 M31 elements fit in a hash, since 31*8 = 242 < 252.
-const M31_ELEMENETS_IN_HASH: usize = 8;
+/// 8 M31 elements are packed into a hash, since 252 // 31 = 8.
+const M31_ELEMENTS_IN_HASH: usize = 8;
 
 /// Equals `(2^31)^4`.
 const M31_SHIFT_POW_4: felt252 = M31_SHIFT * M31_SHIFT * M31_SHIFT * M31_SHIFT;
+
+// Equals `(2^31)^8`
+const M31_SHIFT_POW_8: felt252 = M31_SHIFT_POW_4 * M31_SHIFT_POW_4;
 
 pub impl PoseidonMerkleHasher of MerkleHasher {
     type Hash = felt252;
@@ -31,7 +35,7 @@ pub impl PoseidonMerkleHasher of MerkleHasher {
             hash_array.append(y);
         } else {
             // Most often a single QM31 column commitment due to FRI.
-            // TODO(andrew): Implement non-mixed degree merkle for FRI decommitments.
+            // TODO(andrew): Implement non-mixed degree Merkle for FRI decommitments.
             if let Some(values) = column_values.try_into() {
                 // Inlined and simplified `poseidon_hash_span(...)` for better performance.
                 let [v0, v1, v2, v3]: [BaseField; 4] = (*values).unbox();
@@ -60,40 +64,17 @@ pub impl PoseidonMerkleHasher of MerkleHasher {
             hash_array.append(word);
         }
 
-        if !column_values.is_empty() {
-            let mut word = (*column_values.pop_front().unwrap_or(@BaseField { inner: 0 }))
-                .inner
-                .into();
-
-            for _ in 1..M31_ELEMENETS_IN_HASH {
-                let v = (*column_values.pop_front().unwrap_or(@BaseField { inner: 0 }))
-                    .inner
-                    .into();
-                word = word * M31_SHIFT + v;
+        if let Some(first_word) = column_values.pop_front() {
+            let remainder_length = column_values.len() + 1;
+            let mut word: felt252 = (*first_word).inner.into();
+            for v in column_values {
+                word = word * M31_SHIFT + (*v).inner.into();
             }
-
+            // Encode number of remainder limbs in bits 248, 249 and 250 of the word.
+            word += remainder_length.into() * M31_SHIFT_POW_8;
             hash_array.append(word);
         }
 
         poseidon_hash_span(hash_array.span())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::fields::m31::m31;
-    use super::PoseidonMerkleHasher;
-
-    #[test]
-    fn test_m31() {
-        assert_eq!(
-            PoseidonMerkleHasher::hash_node(None, array![m31(0), m31(1)].span()),
-            2552053700073128806553921687214114320458351061521275103654266875084493044716,
-        );
-
-        assert_eq!(
-            PoseidonMerkleHasher::hash_node(Some((1, 2)), array![m31(3)].span()),
-            159358216886023795422515519110998391754567506678525778721401012606792642769,
-        );
     }
 }

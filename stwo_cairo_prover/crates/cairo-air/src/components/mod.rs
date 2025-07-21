@@ -11,8 +11,7 @@ pub mod blake_g;
 pub mod blake_round;
 pub mod blake_round_sigma;
 pub mod call_opcode;
-pub mod call_opcode_op_1_base_fp;
-pub mod call_opcode_rel;
+pub mod call_opcode_rel_imm;
 pub mod cube_252;
 pub mod generic_opcode;
 pub mod jnz_opcode;
@@ -52,11 +51,14 @@ pub(crate) mod subroutines;
 
 use itertools::Itertools;
 pub use range_check_vector::{
-    range_check_11, range_check_12, range_check_18, range_check_19, range_check_3_3_3_3_3,
-    range_check_3_6, range_check_3_6_6_3, range_check_4_3, range_check_4_4, range_check_4_4_4_4,
-    range_check_5_4, range_check_6, range_check_7_2_5, range_check_8, range_check_9_9,
+    range_check_11, range_check_12, range_check_18, range_check_18_b, range_check_19,
+    range_check_19_b, range_check_19_c, range_check_19_d, range_check_19_e, range_check_19_f,
+    range_check_19_g, range_check_19_h, range_check_3_3_3_3_3, range_check_3_6_6_3,
+    range_check_4_3, range_check_4_4, range_check_4_4_4_4, range_check_5_4, range_check_6,
+    range_check_7_2_5, range_check_8, range_check_9_9, range_check_9_9_b, range_check_9_9_c,
+    range_check_9_9_d, range_check_9_9_e, range_check_9_9_f, range_check_9_9_g, range_check_9_9_h,
 };
-use stwo_prover::constraint_framework::{FrameworkComponent, FrameworkEval};
+use stwo_constraint_framework::{FrameworkComponent, FrameworkEval};
 
 #[cfg(test)]
 pub mod constraints_regression_test_values;

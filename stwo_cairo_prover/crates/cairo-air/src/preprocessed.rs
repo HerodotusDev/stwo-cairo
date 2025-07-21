@@ -2,17 +2,18 @@ use std::iter::zip;
 use std::simd::{u32x16, Simd};
 
 use itertools::{chain, Itertools};
+use stwo::core::fields::m31::{BaseField, M31, MODULUS_BITS};
+use stwo::core::poly::circle::CanonicCoset;
+use stwo::prover::backend::simd::column::BaseColumn;
+use stwo::prover::backend::simd::m31::{PackedM31, N_LANES};
+use stwo::prover::backend::simd::SimdBackend;
+use stwo::prover::backend::Col;
+use stwo::prover::poly::circle::CircleEvaluation;
+use stwo::prover::poly::BitReversedOrder;
 use stwo_cairo_common::preprocessed_consts::blake::N_BLAKE_SIGMA_COLS;
 use stwo_cairo_common::preprocessed_consts::poseidon::N_WORDS as POSEIDON_N_WORDS;
 use stwo_cairo_common::prover_types::simd::LOG_N_LANES;
-use stwo_prover::constraint_framework::preprocessed_columns::PreProcessedColumnId;
-use stwo_prover::core::backend::simd::column::BaseColumn;
-use stwo_prover::core::backend::simd::m31::{PackedM31, N_LANES};
-use stwo_prover::core::backend::simd::SimdBackend;
-use stwo_prover::core::backend::Col;
-use stwo_prover::core::fields::m31::{BaseField, M31, MODULUS_BITS};
-use stwo_prover::core::poly::circle::{CanonicCoset, CircleEvaluation};
-use stwo_prover::core::poly::BitReversedOrder;
+use stwo_constraint_framework::preprocessed_columns::PreProcessedColumnId;
 
 use super::pedersen::const_columns::{PedersenPoints, PEDERSEN_TABLE_N_COLUMNS};
 use super::poseidon::const_columns::PoseidonRoundKeys;
@@ -22,7 +23,7 @@ use crate::blake::const_columns::BlakeSigma;
 const XOR_N_BITS: [u32; 5] = [4, 7, 8, 9, 10];
 
 // Used by every builtin for a read of the memory.
-const MAX_SEQUENCE_LOG_SIZE: u32 = 24;
+pub const MAX_SEQUENCE_LOG_SIZE: u32 = 24;
 
 pub trait PreProcessedColumn {
     fn log_size(&self) -> u32;
@@ -91,21 +92,6 @@ impl PreProcessedTrace {
 }
 
 fn gen_range_check_columns() -> Vec<Box<dyn PreProcessedColumn>> {
-    // RangeCheck_6.
-    let range_check_6 = RangeCheck::new([6], 0);
-    // RangeCheck_8.
-    let range_check_8 = RangeCheck::new([8], 0);
-    // RangeCheck_11.
-    let range_check_11 = RangeCheck::new([11], 0);
-    // RangeCheck_12.
-    let range_check_12 = RangeCheck::new([12], 0);
-    // RangeCheck_18.
-    let range_check_18 = RangeCheck::new([18], 0);
-    // RangeCheck_19.
-    let range_check_19 = RangeCheck::new([19], 0);
-    // RangeCheck_3_6.
-    let range_check_3_6_col_0 = RangeCheck::new([3, 6], 0);
-    let range_check_3_6_col_1 = RangeCheck::new([3, 6], 1);
     // RangeCheck_4_3.
     let range_check_4_3_col_0 = RangeCheck::new([4, 3], 0);
     let range_check_4_3_col_1 = RangeCheck::new([4, 3], 1);
@@ -140,14 +126,6 @@ fn gen_range_check_columns() -> Vec<Box<dyn PreProcessedColumn>> {
     let range_check_3_3_3_3_3_col_4 = RangeCheck::new([3, 3, 3, 3, 3], 4);
 
     vec![
-        Box::new(range_check_6),
-        Box::new(range_check_8),
-        Box::new(range_check_11),
-        Box::new(range_check_12),
-        Box::new(range_check_18),
-        Box::new(range_check_19),
-        Box::new(range_check_3_6_col_0),
-        Box::new(range_check_3_6_col_1),
         Box::new(range_check_4_3_col_0),
         Box::new(range_check_4_3_col_1),
         Box::new(range_check_4_4_col_0),
@@ -353,7 +331,7 @@ pub fn testing_preprocessed_tree(max_log_size: u32) -> PreProcessedTrace {
 pub mod tests {
     use super::*;
     const LOG_SIZE: u32 = 8;
-    use stwo_prover::core::backend::Column;
+    use stwo::prover::backend::Column;
 
     #[test]
     fn test_columns_are_in_decending_order() {

@@ -6,6 +6,9 @@ use stwo_verifier_core::channel::{Channel, ChannelTrait};
 use stwo_verifier_core::fields::m31::M31;
 use stwo_verifier_core::fields::qm31::{QM31, QM31Trait};
 
+#[cfg(test)]
+mod test;
+
 /// Represents the value of the prefix sum column at some index.
 /// Should be used to eliminate padded rows for the logup sum.
 // Copied from:
@@ -18,11 +21,16 @@ pub struct LookupElements<const N: usize> {
     pub alpha_powers: Array<QM31>,
 }
 
-#[generate_trait]
-pub impl LookupElementsImpl<const N: usize> of LookupElementsTrait<N> {
-    fn draw(ref channel: Channel) -> LookupElements<N> {
+
+pub trait LookupElementsTrait<const N: usize> {
+    fn draw(
+        ref channel: Channel,
+    ) -> LookupElements<
+        N,
+    > {
         assert!(N != 0);
-        let [z, alpha]: [QM31; 2] = (*channel.draw_felts(2).span().try_into().unwrap()).unbox();
+        let [z, alpha]: [QM31; 2] = (*channel.draw_secure_felts(2).span().try_into().unwrap())
+            .unbox();
 
         let mut acc = One::one();
         let mut alpha_powers = array![acc];
@@ -35,6 +43,56 @@ pub impl LookupElementsImpl<const N: usize> of LookupElementsTrait<N> {
         LookupElements { z, alpha, alpha_powers }
     }
 
+
+    /// Computes \sigma_i = -z + values[i] * self.alpha^i where values[i] is in qm31.
+    ///
+    /// We use horner evaluation here regardless of the qm31_opcode feature flag as it is faster in
+    /// both cases.
+    fn combine_qm31<impl IntoSpan: ToSpanTrait<[QM31; N], QM31>>(
+        self: @LookupElements<N>, values: [QM31; N],
+    ) -> QM31 {
+        let alpha = *self.alpha;
+        let mut values_span = IntoSpan::span(@values);
+        let mut sum = *values_span.pop_back().unwrap();
+
+        while let Some(value) = values_span.pop_back() {
+            sum = sum * alpha + *value;
+        }
+
+        sum - *self.z
+    }
+
+    /// Computes \sigma_i = -z + values[i] * self.alpha^i where values[i] is in m31.
+    ///
+    /// The implementation varies based on the qm31_opcode feature flag.
+    fn combine<impl IntoSpan: ToSpanTrait<[M31; N], M31>>(
+        self: @LookupElements<N>, values: [M31; N],
+    ) -> QM31;
+}
+
+#[cfg(feature: "qm31_opcode")]
+pub impl LookupElementsImpl<const N: usize> of LookupElementsTrait<N> {
+    /// With qm31_opcode enabled, qm31 by qm31 multiplication becomes a single opcode, making
+    /// Horner's method the more efficient choice.
+    fn combine<impl IntoSpan: ToSpanTrait<[M31; N], M31>>(
+        self: @LookupElements<N>, values: [M31; N],
+    ) -> QM31 {
+        let alpha = *self.alpha;
+        let mut values_span = IntoSpan::span(@values);
+        let mut sum = (*values_span.pop_back().unwrap()).into();
+
+        while let Some(value) = values_span.pop_back() {
+            sum = sum * alpha + (*value).into();
+        }
+
+        sum - *self.z
+    }
+}
+
+#[cfg(not(feature: "qm31_opcode"))]
+pub impl LookupElementsImpl<const N: usize> of LookupElementsTrait<N> {
+    /// Without qm31_opcode, the naive approach using precomputed alpha powers is faster than
+    /// Horner's method because it uses qm31 by m31 multiplication instead of qm31 by qm31.
     fn combine<impl IntoSpan: ToSpanTrait<[M31; N], M31>>(
         self: @LookupElements<N>, values: [M31; N],
     ) -> QM31 {
@@ -127,19 +185,48 @@ enum PreprocessedColumnsAllocationMode {
 pub enum PreprocessedColumn {
     /// Symbolic representation of xor lookup table column of the form: `(n_term_bits, term)`.
     /// Where term is `{ 0 = left operand, 1 = right operand, 2 = xor result }`.
-    Xor: (u32, usize),
+    BitwiseXor: (u32, usize),
     /// A column with the numbers [0..2^log_size-1].
     Seq: u32,
+    /// Symbolic representation of range check column.
+    /// The column is of the form `(log_ranges, column_index)`.
+    RangeCheck5: ([u32; 5], usize),
+    RangeCheck4: ([u32; 4], usize),
+    RangeCheck3: ([u32; 3], usize),
+    RangeCheck2: ([u32; 2], usize),
+    /// Poseidon round keys of the form `(column_index)`.
+    PoseidonRoundKeys: usize,
+    /// Blake2s sigma column.
+    BlakeSigma: usize,
+    /// Pedersen points of the form `(column_index)`.
+    PedersenPoints: usize,
 }
 
 #[generate_trait]
 pub impl PreprocessedColumnImpl of PreprocessedColumnTrait {
     fn log_size(self: @PreprocessedColumn) -> u32 {
         match self {
-            PreprocessedColumn::Xor((n_term_bits, _)) => *n_term_bits * 2,
+            PreprocessedColumn::BitwiseXor((n_term_bits, _)) => *n_term_bits * 2,
             PreprocessedColumn::Seq(log_size) => *log_size,
+            PreprocessedColumn::RangeCheck5((values, _)) => range_check_size(values),
+            PreprocessedColumn::RangeCheck4((values, _)) => range_check_size(values),
+            PreprocessedColumn::RangeCheck3((values, _)) => range_check_size(values),
+            PreprocessedColumn::RangeCheck2((values, _)) => range_check_size(values),
+            PreprocessedColumn::PoseidonRoundKeys(_) => 6,
+            PreprocessedColumn::BlakeSigma(_) => 4,
+            PreprocessedColumn::PedersenPoints(_) => 23,
         }
     }
+}
+
+pub fn range_check_size<const N: usize, impl IntoSpan: ToSpanTrait<[u32; N], u32>>(
+    n_bits_vec: @[u32; N],
+) -> u32 {
+    let mut total: u32 = 0;
+    for n_bits in IntoSpan::span(n_bits_vec) {
+        total = total + *n_bits;
+    }
+    total
 }
 
 /// An encoding of a [`PreprocessedColumn`] to index into [`Felt252Dict`].
@@ -147,12 +234,19 @@ pub impl PreprocessedColumnImpl of PreprocessedColumnTrait {
 pub impl PreprocessedColumnKey of PreprocessedColumnKeyTrait {
     fn encode(key: @PreprocessedColumn) -> felt252 {
         const FELT252_2_POW_32: felt252 = 0x100000000;
-        // TODO: Is there something like Rust's `core::mem::discriminant` in Cairo?
+
         const XOR_DISCRIMINANT: felt252 = 0;
         const SEQ_TABLE_DISCRIMINANT: felt252 = 1;
+        const RANGE_CHECK_2_DISCRIMINANT: felt252 = 2;
+        const RANGE_CHECK_3_DISCRIMINANT: felt252 = 3;
+        const RANGE_CHECK_4_DISCRIMINANT: felt252 = 4;
+        const RANGE_CHECK_5_DISCRIMINANT: felt252 = 5;
+        const POSEIDON_ROUND_KEYS_DISCRIMINANT: felt252 = 6;
+        const BLAKE_SIGMA_DISCRIMINANT: felt252 = 7;
+        const PEDERSEN_POINTS_DISCRIMINANT: felt252 = 8;
 
         match key {
-            PreprocessedColumn::Xor((
+            PreprocessedColumn::BitwiseXor((
                 n_term_bits, term,
             )) => {
                 let mut res = (*term).into();
@@ -165,25 +259,46 @@ pub impl PreprocessedColumnKey of PreprocessedColumnKeyTrait {
                 res = res * FELT252_2_POW_32 + SEQ_TABLE_DISCRIMINANT;
                 res
             },
+            PreprocessedColumn::RangeCheck5((
+                values, column_index,
+            )) => range_check_encode(values, *column_index, RANGE_CHECK_5_DISCRIMINANT),
+            PreprocessedColumn::RangeCheck4((
+                values, column_index,
+            )) => range_check_encode(values, *column_index, RANGE_CHECK_4_DISCRIMINANT),
+            PreprocessedColumn::RangeCheck3((
+                values, column_index,
+            )) => range_check_encode(values, *column_index, RANGE_CHECK_3_DISCRIMINANT),
+            PreprocessedColumn::RangeCheck2((
+                values, column_index,
+            )) => range_check_encode(values, *column_index, RANGE_CHECK_2_DISCRIMINANT),
+            PreprocessedColumn::PoseidonRoundKeys(column_index) => {
+                let mut res = (*column_index).into();
+                res = res * FELT252_2_POW_32 + POSEIDON_ROUND_KEYS_DISCRIMINANT;
+                res
+            },
+            PreprocessedColumn::BlakeSigma(column_index) => {
+                let mut res = (*column_index).into();
+                res = res * FELT252_2_POW_32 + BLAKE_SIGMA_DISCRIMINANT;
+                res
+            },
+            PreprocessedColumn::PedersenPoints(column_index) => {
+                let mut res = (*column_index).into();
+                res = res * FELT252_2_POW_32 + PEDERSEN_POINTS_DISCRIMINANT;
+                res
+            },
         }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{PreprocessedColumn, PreprocessedColumnSet, PreprocessedColumnSetImpl};
+pub fn range_check_encode<const N: usize, impl IntoSpan: ToSpanTrait<[u32; N], u32>>(
+    n_bits_vec: @[u32; N], column_index: usize, discriminant: felt252,
+) -> felt252 {
+    const FELT252_2_POW_32: felt252 = 0x100000000;
 
-    #[test]
-    fn test_preprocessed_column_set() {
-        let mut set: PreprocessedColumnSet = Default::default();
-        let seq_16_column = PreprocessedColumn::Seq(16);
-        let seq_10_column = PreprocessedColumn::Seq(10);
-
-        set.insert(seq_16_column);
-        set.insert(seq_16_column);
-
-        assert!(set.contains(seq_16_column));
-        assert!(!set.contains(seq_10_column));
-        assert_eq!(set.values, array![seq_16_column]);
+    let mut total: felt252 = column_index.into();
+    for n_bits in IntoSpan::span(n_bits_vec) {
+        total = total * FELT252_2_POW_32 + (*n_bits).into();
     }
+    total = total * FELT252_2_POW_32 + discriminant;
+    total
 }

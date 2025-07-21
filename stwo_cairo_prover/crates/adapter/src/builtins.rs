@@ -6,6 +6,7 @@ use cairo_vm::types::builtin_name::BuiltinName;
 use cairo_vm::types::relocatable::MaybeRelocatable;
 use serde::{Deserialize, Serialize};
 use stwo_cairo_common::prover_types::simd::N_LANES;
+use tracing::{info, span, Level};
 
 use super::memory::MemoryBuilder;
 
@@ -44,9 +45,6 @@ impl From<VMMemorySegmentAddresses> for MemorySegmentAddresses {
 pub struct BuiltinSegments {
     pub add_mod: Option<MemorySegmentAddresses>,
     pub bitwise: Option<MemorySegmentAddresses>,
-    pub ec_op: Option<MemorySegmentAddresses>,
-    pub ecdsa: Option<MemorySegmentAddresses>,
-    pub keccak: Option<MemorySegmentAddresses>,
     pub output: Option<MemorySegmentAddresses>,
     pub mul_mod: Option<MemorySegmentAddresses>,
     pub pedersen: Option<MemorySegmentAddresses>,
@@ -77,15 +75,15 @@ impl BuiltinSegments {
                 match builtin_name {
                     BuiltinName::range_check => res.range_check_bits_128 = segment,
                     BuiltinName::pedersen => res.pedersen = segment,
-                    BuiltinName::ecdsa => res.ecdsa = segment,
-                    BuiltinName::keccak => res.keccak = segment,
                     BuiltinName::bitwise => res.bitwise = segment,
-                    BuiltinName::ec_op => res.ec_op = segment,
                     BuiltinName::poseidon => res.poseidon = segment,
                     BuiltinName::range_check96 => res.range_check_bits_96 = segment,
                     BuiltinName::add_mod => res.add_mod = segment,
                     BuiltinName::mul_mod => res.mul_mod = segment,
                     BuiltinName::output => res.output = segment,
+                    BuiltinName::ec_op | BuiltinName::keccak | BuiltinName::ecdsa => {
+                        assert!(segment.is_none(), "{} builtin is not supported", name);
+                    }
                     // Not builtins.
                     BuiltinName::segment_arena => {}
                 }
@@ -106,9 +104,6 @@ impl BuiltinSegments {
 
         insert_builtin(BuiltinName::add_mod, &self.add_mod, ADD_MOD_MEMORY_CELLS);
         insert_builtin(BuiltinName::bitwise, &self.bitwise, BITWISE_MEMORY_CELLS);
-        insert_builtin(BuiltinName::ec_op, &self.ec_op, EC_OP_MEMORY_CELLS);
-        insert_builtin(BuiltinName::ecdsa, &self.ecdsa, ECDSA_MEMORY_CELLS);
-        insert_builtin(BuiltinName::keccak, &self.keccak, KECCAK_MEMORY_CELLS);
         insert_builtin(BuiltinName::mul_mod, &self.mul_mod, MUL_MOD_MEMORY_CELLS);
         insert_builtin(BuiltinName::pedersen, &self.pedersen, PEDERSEN_MEMORY_CELLS);
         insert_builtin(BuiltinName::poseidon, &self.poseidon, POSEIDON_MEMORY_CELLS);
@@ -150,30 +145,6 @@ impl BuiltinSegments {
                 memory,
                 BITWISE_MEMORY_CELLS as u32,
                 Some("bitwise"),
-            ));
-        }
-        if let Some(segment) = &self.ec_op {
-            self.ec_op = Some(pad_segment(
-                segment,
-                memory,
-                EC_OP_MEMORY_CELLS as u32,
-                Some("ec_op"),
-            ));
-        }
-        if let Some(segment) = &self.ecdsa {
-            self.ecdsa = Some(pad_segment(
-                segment,
-                memory,
-                ECDSA_MEMORY_CELLS as u32,
-                Some("ecdsa"),
-            ));
-        }
-        if let Some(segment) = &self.keccak {
-            self.keccak = Some(pad_segment(
-                segment,
-                memory,
-                KECCAK_MEMORY_CELLS as u32,
-                Some("keccak"),
             ));
         }
         if let Some(segment) = &self.mul_mod {
@@ -218,10 +189,14 @@ impl BuiltinSegments {
         }
     }
 
+    // Pads the relocatable builtin segments output by the VM to match the size required by Stwo.
+    // Assumes and verifies that the segments contain no holes and that their length is divisible by
+    // the number of cells per instance.
     pub fn pad_relocatble_builtin_segments(
         relocatable_memory: &mut [Vec<Option<MaybeRelocatable>>],
         builtins_segments: BTreeMap<usize, BuiltinName>,
     ) {
+        let _span = span!(Level::INFO, "pad_relocatble_builtin_segments").entered();
         for (segment_index, builtin_name) in builtins_segments {
             let current_buitlin_segment = &mut relocatable_memory[segment_index];
 
@@ -247,8 +222,18 @@ impl BuiltinSegments {
             };
             assert!(
                 original_segment_len % cells_per_instance == 0,
-                "expected builtin segment size to be divisible by cells_per_instance"
+                "builtin segment: {} size is {}, which is not divisble by {}",
+                builtin_name,
+                original_segment_len,
+                cells_per_instance
             );
+
+            if !current_buitlin_segment.iter().all(|x| x.is_some()) {
+                panic!(
+                    "Builtins segments '{}' at segment index: {}, contains a hole.",
+                    builtin_name, segment_index
+                );
+            }
 
             // Builtin segment size is extended to the next power of two instances.
             let new_segment_size = original_segment_len
@@ -264,6 +249,13 @@ impl BuiltinSegments {
                 current_buitlin_segment[i] =
                     current_buitlin_segment[last_instance_start + (i % cells_per_instance)].clone();
             }
+
+            info!(
+                "Padded builtin segment '{}' from {} to {} instances.",
+                builtin_name,
+                original_segment_len / cells_per_instance,
+                new_segment_size / cells_per_instance
+            );
         }
     }
 
@@ -288,9 +280,6 @@ impl BuiltinSegments {
         let max_stop_ptr = [
             self.add_mod.as_ref(),
             self.bitwise.as_ref(),
-            self.ec_op.as_ref(),
-            self.ecdsa.as_ref(),
-            self.keccak.as_ref(),
             self.mul_mod.as_ref(),
             self.pedersen.as_ref(),
             self.poseidon.as_ref(),
@@ -400,7 +389,6 @@ mod builtin_padding {
     }
 }
 
-// TODO(Stav): move read json to a test function.
 #[cfg(test)]
 mod test_builtin_segments {
     use std::path::PathBuf;
@@ -453,9 +441,6 @@ mod test_builtin_segments {
                 stop_ptr: 23901
             })
         );
-        assert_eq!(builtin_segments.ec_op, None);
-        assert_eq!(builtin_segments.ecdsa, None);
-        assert_eq!(builtin_segments.keccak, None);
         assert_eq!(builtin_segments.mul_mod, None);
         assert_eq!(builtin_segments.pedersen, None);
         assert_eq!(builtin_segments.poseidon, None);
@@ -524,7 +509,7 @@ mod test_builtin_segments {
         let new_num_instances = segment_length / cells_per_instance;
         assert_eq!(new_num_instances, padded_num_instances);
 
-        let memory = memory_builder.build();
+        let (memory, ..) = memory_builder.build();
         assert_eq!(memory.address_to_id.len(), new_stop_ptr);
 
         let mut instance_to_verify_start = stop_ptr as u32;
@@ -567,7 +552,7 @@ mod test_builtin_segments {
         let expected_xor = std::array::from_fn(|i| op0[i] ^ op1[i]);
         let expected_or = std::array::from_fn(|i| op0[i] | op1[i]);
         builtin_segments.fill_memory_holes(&mut memory);
-        let memory = memory.build();
+        let (memory, ..) = memory.build();
 
         let and_res = memory.get(2).as_u256();
         let xor_res = memory.get(3).as_u256();
@@ -651,5 +636,38 @@ mod test_builtin_segments {
         for (value, expected_value) in relocatable_memory[1].iter().zip(segment1.iter().cycle()) {
             assert_eq!(value, expected_value);
         }
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "builtin segment: mul_mod_builtin size is 864, which is not divisble by 7"
+    )]
+    fn test_builtin_segment_invalid_size() {
+        let mul_mod_segment =
+            vec![Some(MaybeRelocatable::Int(7.into())); MUL_MOD_MEMORY_CELLS * 123 + 3];
+        let mut relocatable_memory = [mul_mod_segment];
+        let builtins_segments = BTreeMap::from([(0, BuiltinName::mul_mod)]);
+
+        BuiltinSegments::pad_relocatble_builtin_segments(
+            &mut relocatable_memory,
+            builtins_segments,
+        );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Builtins segments 'bitwise_builtin' at segment index: 0, contains a hole."
+    )]
+    fn test_builtin_segment_contains_hole() {
+        let mut segment0 = vec![Some(MaybeRelocatable::Int(1.into())); 80];
+        segment0[62] = None;
+
+        let mut relocatable_memory = vec![segment0];
+        let builtins_segments = BTreeMap::from([(0, BuiltinName::bitwise)]);
+
+        BuiltinSegments::pad_relocatble_builtin_segments(
+            &mut relocatable_memory,
+            builtins_segments,
+        );
     }
 }

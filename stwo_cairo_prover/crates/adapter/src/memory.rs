@@ -1,13 +1,15 @@
-use std::io::Read;
+use std::collections::hash_map::Entry;
 use std::ops::{Deref, DerefMut};
 
-use bytemuck::{bytes_of_mut, Pod, Zeroable};
+use bytemuck::{Pod, Zeroable};
 use cairo_vm::stdlib::collections::HashMap;
-use itertools::Itertools;
+use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use stwo_cairo_common::memory::{N_BITS_PER_FELT, N_M31_IN_SMALL_FELT252};
+use tracing::{span, Level};
 
-/// Prime 2^251 + 17 * 2^192 + 1 in little endian.
+/// P is 2^251 + 17 * 2^192 - 1.
+/// All constants below are in little endian.
 pub const P_MIN_1: [u32; 8] = [
     0x0000_0000,
     0x0000_0000,
@@ -18,6 +20,7 @@ pub const P_MIN_1: [u32; 8] = [
     0x0000_0011,
     0x0800_0000,
 ];
+
 pub const P_MIN_2: [u32; 8] = [
     0xFFFF_FFFF,
     0xFFFF_FFFF,
@@ -39,33 +42,32 @@ pub struct MemoryEntry {
     pub value: [u32; 8],
 }
 
-pub struct MemoryEntryIter<'a, R: Read>(pub &'a mut R);
-impl<R: Read> Iterator for MemoryEntryIter<'_, R> {
-    type Item = MemoryEntry;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut entry = MemoryEntry::default();
-        self.0
-            .read_exact(bytes_of_mut(&mut entry))
-            .ok()
-            .map(|_| entry)
-    }
-}
-
+/// Configuration for the memory.
+///
+/// # Attributes
+///
+/// - `small_max` the maximum value that can be stored in a small value.
+/// - `log_small_value_capacity` maximal capacity for small values. Leftover values will be handled
+///   as big values.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MemoryConfig {
     pub small_max: u128,
+    pub log_small_value_capacity: u32,
 }
 impl MemoryConfig {
-    pub fn new(small_max: u128) -> MemoryConfig {
+    pub fn new(small_max: u128, log_small_value_capacity: u32) -> MemoryConfig {
         assert!(small_max < 1 << (N_M31_IN_SMALL_FELT252 * N_BITS_PER_FELT));
-        MemoryConfig { small_max }
+        MemoryConfig {
+            small_max,
+            log_small_value_capacity,
+        }
     }
 }
 impl Default for MemoryConfig {
     fn default() -> Self {
         MemoryConfig {
             small_max: (1 << 72) - 1,
+            log_small_value_capacity: 24,
         }
     }
 }
@@ -76,7 +78,6 @@ impl Default for MemoryConfig {
 pub struct Memory {
     pub config: MemoryConfig,
     pub address_to_id: Vec<EncodedMemoryValueId>,
-    pub inst_cache: HashMap<u32, u128>,
     pub f252_values: Vec<[u32; 8]>,
     pub small_values: Vec<u128>,
 }
@@ -85,49 +86,28 @@ impl Memory {
         match self.address_to_id[addr as usize].decode() {
             MemoryValueId::Small(id) => MemoryValue::Small(self.small_values[id as usize]),
             MemoryValueId::F252(id) => MemoryValue::F252(self.f252_values[id as usize]),
-            // TODO(Ohad): This case should be a panic, but at the moment there is padding on memory
-            // holes, fill the holes before padding, then uncomment.
-            // MemoryValueId::Empty => panic!("Accessing empty memory cell"),
-            MemoryValueId::Empty => MemoryValue::Small(0),
+            MemoryValueId::Empty => panic!("Accessing empty memory cell"),
         }
     }
 
     pub fn get_raw_id(&self, addr: u32) -> u32 {
         self.address_to_id[addr as usize].0
     }
-
-    pub fn get_inst(&self, addr: u32) -> Option<u128> {
-        self.inst_cache.get(&addr).copied()
-    }
-
-    pub fn iter_values(&self) -> impl Iterator<Item = MemoryValue> + '_ {
-        let mut values = (0..self.address_to_id.len())
-            .map(|addr| self.get(addr as u32))
-            .collect_vec();
-
-        let size = values.len().next_power_of_two();
-        values.resize(size, MemoryValue::F252([0; 8]));
-        values.into_iter()
-    }
 }
 
 // TODO(spapini): Optimize. This should be SIMD.
 pub fn value_from_felt252(felt252: F252) -> MemoryValue {
     if felt252[3..8] == [0; 5] && felt252[2] < (1 << 8) {
-        MemoryValue::Small(
-            felt252[0] as u128
-                + ((felt252[1] as u128) << 32)
-                + ((felt252[2] as u128) << 64)
-                + ((felt252[3] as u128) << 96),
-        )
+        MemoryValue::Small(limbs_to_u128(felt252[0..4].try_into().unwrap()))
     } else {
         MemoryValue::F252(felt252)
     }
 }
 
-// TODO(ohadn): derive or impl a default for MemoryBuilder.
+// TODO(Ohad): Remove `inst_cache`.
 pub struct MemoryBuilder {
     memory: Memory,
+    inst_cache: DashMap<u32, u128>,
     felt252_id_cache: HashMap<[u32; 8], usize>,
     small_values_cache: HashMap<u128, usize>,
 }
@@ -137,10 +117,10 @@ impl MemoryBuilder {
             memory: Memory {
                 config,
                 address_to_id: Vec::new(),
-                inst_cache: HashMap::new(),
                 f252_values: Vec::new(),
                 small_values: Vec::new(),
             },
+            inst_cache: DashMap::new(),
             felt252_id_cache: HashMap::new(),
             small_values_cache: HashMap::new(),
         }
@@ -150,6 +130,7 @@ impl MemoryBuilder {
         config: MemoryConfig,
         iter: I,
     ) -> MemoryBuilder {
+        let _span = span!(Level::INFO, "MemoryBuilder::from_iter").entered();
         let memory_entries = iter.into_iter();
         let mut builder = Self::new(config);
         for entry in memory_entries {
@@ -160,43 +141,56 @@ impl MemoryBuilder {
         builder
     }
 
-    pub fn get_inst(&mut self, addr: u32) -> u128 {
-        let mut inst_cache = std::mem::take(&mut self.inst_cache);
-        let res = *inst_cache.entry(addr).or_insert_with(|| {
+    pub fn get_inst(&self, addr: u32) -> u128 {
+        *self.inst_cache.entry(addr).or_insert_with(|| {
             let value = self.memory.get(addr).as_u256();
             assert_eq!(value[3..8], [0; 5]);
             value[0] as u128 | ((value[1] as u128) << 32) | ((value[2] as u128) << 64)
-        });
-        self.inst_cache = inst_cache;
-        res
+        })
     }
 
-    // TODO(ohadn): settle on an address integer type, and use it consistently.
-    // TODO(Ohad): add debug sanity checks.
     pub fn set(&mut self, addr: u32, value: MemoryValue) {
         if addr as usize >= self.address_to_id.len() {
             self.address_to_id
                 .resize(addr as usize + 1, EncodedMemoryValueId::default());
         }
+
         let res = EncodedMemoryValueId::encode(match value {
-            MemoryValue::Small(val) => {
-                let len = self.small_values.len();
-                let id = *self.small_values_cache.entry(val).or_insert(len);
-                if id == len {
-                    self.small_values.push(val);
-                };
-                MemoryValueId::Small(id as u32)
-            }
-            MemoryValue::F252(val) => {
-                let len = self.f252_values.len();
-                let id = *self.felt252_id_cache.entry(val).or_insert(len);
-                if id == len {
-                    self.f252_values.push(val);
-                };
-                MemoryValueId::F252(id as u32)
-            }
+            MemoryValue::Small(val) => self.push_small_value(val),
+            MemoryValue::F252(val) => self.push_f252_value(val),
         });
         self.address_to_id[addr as usize] = res;
+    }
+
+    // Assumes value is smaller than `config.small_max`.
+    fn push_small_value(&mut self, val: u128) -> MemoryValueId {
+        let len = self.small_values.len();
+        let capacity = 1 << self.config.log_small_value_capacity;
+        match self.small_values_cache.entry(val) {
+            // If the value was seen before, return the ID.
+            Entry::Occupied(occupied_entry) => MemoryValueId::Small(*occupied_entry.get() as u32),
+            Entry::Vacant(vacant_entry) => {
+                // Otherwise, check if we can fit it in the small values component.
+                if len < capacity {
+                    vacant_entry.insert(len);
+                    self.small_values.push(val);
+                    MemoryValueId::Small(len as u32)
+                } else {
+                    // If not, treat it as a large value.
+                    let f252_value = MemoryValue::Small(val).as_u256();
+                    self.push_f252_value(f252_value)
+                }
+            }
+        }
+    }
+
+    fn push_f252_value(&mut self, val: [u32; 8]) -> MemoryValueId {
+        let len = self.f252_values.len();
+        let id = *self.felt252_id_cache.entry(val).or_insert(len);
+        if id == len {
+            self.f252_values.push(val);
+        };
+        MemoryValueId::F252(id as u32)
     }
 
     /// Copies a block of memory from one location to another.
@@ -225,8 +219,8 @@ impl MemoryBuilder {
         }
     }
 
-    pub fn build(self) -> Memory {
-        self.memory
+    pub fn build(self) -> (Memory, Vec<(u32, u128)>) {
+        (self.memory, self.inst_cache.into_iter().collect())
     }
 }
 impl Deref for MemoryBuilder {
@@ -293,7 +287,10 @@ impl MemoryValue {
     pub fn as_small(&self) -> u128 {
         match self {
             MemoryValue::Small(x) => *x,
-            MemoryValue::F252(_) => panic!("Cannot convert F252 to u128"),
+            MemoryValue::F252(felt252) => {
+                assert_eq!(felt252[4..8], [0; 4], "Cannot convert F252 to u128");
+                limbs_to_u128(felt252[0..4].try_into().unwrap())
+            }
         }
     }
 
@@ -306,6 +303,13 @@ impl MemoryValue {
             MemoryValue::F252(x) => x,
         }
     }
+
+    pub fn is_zero(&self) -> bool {
+        match *self {
+            MemoryValue::Small(x) => x == 0,
+            MemoryValue::F252(x) => x == [0; 8],
+        }
+    }
 }
 
 pub fn u128_to_4_limbs(x: u128) -> [u32; 4] {
@@ -315,6 +319,13 @@ pub fn u128_to_4_limbs(x: u128) -> [u32; 4] {
         (x >> 64) as u32,
         (x >> 96) as u32,
     ]
+}
+
+pub fn limbs_to_u128(limbs: [u32; 4]) -> u128 {
+    limbs[0] as u128
+        + ((limbs[1] as u128) << 32)
+        + ((limbs[2] as u128) << 64)
+        + ((limbs[3] as u128) << 96)
 }
 
 #[cfg(test)]
@@ -413,7 +424,7 @@ mod tests {
         let expxcted_id_addr_1 = EncodedMemoryValueId::default();
         let expxcted_id_addr_2 = EncodedMemoryValueId::encode(MemoryValueId::Small(0));
 
-        let memory = MemoryBuilder::from_iter(MemoryConfig::default(), entries).build();
+        let (memory, ..) = MemoryBuilder::from_iter(MemoryConfig::default(), entries).build();
         let addr_0_id = memory.address_to_id[0];
         let addr_1_id = memory.address_to_id[1];
         let addr_2_id = memory.address_to_id[2];
@@ -432,8 +443,6 @@ mod tests {
         assert_eq!(memory.get(85), MemoryValue::Small(2));
     }
 
-    // TODO(Ohad): unignore.
-    #[ignore = "poseidon has holes"]
     #[should_panic = "Accessing empty memory cell"]
     #[test]
     fn test_access_invalid_address() {
@@ -447,7 +456,7 @@ mod tests {
                 value: [1, 2, 0, 0, 0, 0, 0, 0],
             },
         ];
-        let memory = MemoryBuilder::from_iter(MemoryConfig::default(), entries).build();
+        let (memory, ..) = MemoryBuilder::from_iter(MemoryConfig::default(), entries).build();
 
         memory.get(1);
     }

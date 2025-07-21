@@ -1,17 +1,17 @@
 use num_traits::Zero;
-use stwo_prover::constraint_framework::TraceLocationAllocator;
-use stwo_prover::core::air::ComponentProver;
-use stwo_prover::core::backend::simd::SimdBackend;
-use stwo_prover::core::fields::qm31::QM31;
+use stwo::core::fields::qm31::QM31;
+use stwo::prover::backend::simd::SimdBackend;
+use stwo::prover::ComponentProver;
+use stwo_constraint_framework::TraceLocationAllocator;
 
-use crate::air::CairoInteractionElements;
+use crate::air::{accumulate_relation_uses, CairoInteractionElements, RelationUsesDict};
 use crate::components::prelude::*;
 use crate::components::{
     cube_252, indented_component_display, poseidon_3_partial_rounds_chain,
     poseidon_full_round_chain, poseidon_round_keys, range_check_felt_252_width_27,
 };
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct PoseidonContextClaim {
     pub claim: Option<Claim>,
 }
@@ -28,9 +28,15 @@ impl PoseidonContextClaim {
             .map(|claim| claim.log_sizes())
             .unwrap_or_default()
     }
+
+    pub fn accumulate_relation_uses(&self, relation_uses: &mut RelationUsesDict) {
+        if let Some(claim) = &self.claim {
+            claim.accumulate_relation_uses(relation_uses);
+        }
+    }
 }
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct Claim {
     pub poseidon_3_partial_rounds_chain: poseidon_3_partial_rounds_chain::Claim,
     pub poseidon_full_round_chain: poseidon_full_round_chain::Claim,
@@ -59,9 +65,43 @@ impl Claim {
 
         TreeVec::concat_cols(log_sizes)
     }
+
+    pub fn accumulate_relation_uses(&self, relation_uses: &mut RelationUsesDict) {
+        let Self {
+            poseidon_3_partial_rounds_chain,
+            poseidon_full_round_chain,
+            cube_252,
+            poseidon_round_keys: _,
+            range_check_felt_252_width_27,
+        } = self;
+
+        // NOTE: The following components do not USE relations:
+        // - poseidon_round_keys
+
+        accumulate_relation_uses(
+            relation_uses,
+            poseidon_3_partial_rounds_chain::RELATION_USES_PER_ROW,
+            poseidon_3_partial_rounds_chain.log_size,
+        );
+        accumulate_relation_uses(
+            relation_uses,
+            poseidon_full_round_chain::RELATION_USES_PER_ROW,
+            poseidon_full_round_chain.log_size,
+        );
+        accumulate_relation_uses(
+            relation_uses,
+            cube_252::RELATION_USES_PER_ROW,
+            cube_252.log_size,
+        );
+        accumulate_relation_uses(
+            relation_uses,
+            range_check_felt_252_width_27::RELATION_USES_PER_ROW,
+            range_check_felt_252_width_27.log_size,
+        );
+    }
 }
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct PoseidonContextInteractionClaim {
     pub claim: Option<InteractionClaim>,
 }
@@ -80,7 +120,7 @@ impl PoseidonContextInteractionClaim {
     }
 }
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct InteractionClaim {
     pub poseidon_3_partial_rounds_chain: poseidon_3_partial_rounds_chain::InteractionClaim,
     pub poseidon_full_round_chain: poseidon_full_round_chain::InteractionClaim,
@@ -212,7 +252,42 @@ impl Components {
                 claim: claim.claim.as_ref().unwrap().cube_252,
                 cube_252_lookup_elements: interaction_elements.cube_252.clone(),
                 range_check_19_lookup_elements: interaction_elements.range_checks.rc_19.clone(),
+                range_check_19_b_lookup_elements: interaction_elements.range_checks.rc_19_b.clone(),
+                range_check_19_c_lookup_elements: interaction_elements.range_checks.rc_19_c.clone(),
+                range_check_19_d_lookup_elements: interaction_elements.range_checks.rc_19_d.clone(),
+                range_check_19_e_lookup_elements: interaction_elements.range_checks.rc_19_e.clone(),
+                range_check_19_f_lookup_elements: interaction_elements.range_checks.rc_19_f.clone(),
+                range_check_19_g_lookup_elements: interaction_elements.range_checks.rc_19_g.clone(),
+                range_check_19_h_lookup_elements: interaction_elements.range_checks.rc_19_h.clone(),
                 range_check_9_9_lookup_elements: interaction_elements.range_checks.rc_9_9.clone(),
+                range_check_9_9_b_lookup_elements: interaction_elements
+                    .range_checks
+                    .rc_9_9_b
+                    .clone(),
+                range_check_9_9_c_lookup_elements: interaction_elements
+                    .range_checks
+                    .rc_9_9_c
+                    .clone(),
+                range_check_9_9_d_lookup_elements: interaction_elements
+                    .range_checks
+                    .rc_9_9_d
+                    .clone(),
+                range_check_9_9_e_lookup_elements: interaction_elements
+                    .range_checks
+                    .rc_9_9_e
+                    .clone(),
+                range_check_9_9_f_lookup_elements: interaction_elements
+                    .range_checks
+                    .rc_9_9_f
+                    .clone(),
+                range_check_9_9_g_lookup_elements: interaction_elements
+                    .range_checks
+                    .rc_9_9_g
+                    .clone(),
+                range_check_9_9_h_lookup_elements: interaction_elements
+                    .range_checks
+                    .rc_9_9_h
+                    .clone(),
             },
             interaction_claim.cube_252.claimed_sum,
         );
@@ -234,7 +309,27 @@ impl Components {
                     .range_check_felt_252_width_27
                     .clone()),
                 range_check_18_lookup_elements: (interaction_elements.range_checks.rc_18.clone()),
+                range_check_18_b_lookup_elements: (interaction_elements
+                    .range_checks
+                    .rc_18_b
+                    .clone()),
                 range_check_9_9_lookup_elements: (interaction_elements.range_checks.rc_9_9.clone()),
+                range_check_9_9_b_lookup_elements: (interaction_elements
+                    .range_checks
+                    .rc_9_9_b
+                    .clone()),
+                range_check_9_9_c_lookup_elements: (interaction_elements
+                    .range_checks
+                    .rc_9_9_c
+                    .clone()),
+                range_check_9_9_d_lookup_elements: (interaction_elements
+                    .range_checks
+                    .rc_9_9_d
+                    .clone()),
+                range_check_9_9_e_lookup_elements: (interaction_elements
+                    .range_checks
+                    .rc_9_9_e
+                    .clone()),
             },
             interaction_claim.range_check_felt_252_width_27.claimed_sum,
         );

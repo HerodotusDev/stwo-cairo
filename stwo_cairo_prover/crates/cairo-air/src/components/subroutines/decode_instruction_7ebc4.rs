@@ -1,6 +1,6 @@
 use crate::components::prelude::*;
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct DecodeInstruction7Ebc4 {}
 
 impl DecodeInstruction7Ebc4 {
@@ -11,14 +11,12 @@ impl DecodeInstruction7Ebc4 {
     #[allow(unused_variables)]
     #[allow(clippy::too_many_arguments)]
     pub fn evaluate<E: EvalAtRow>(
-        decode_instruction_7ebc4fb565f52942_input: E::F,
+        [decode_instruction_7ebc4_input_pc]: [E::F; 1],
         ap_update_add_1_col0: E::F,
-        eval: &mut E,
         verify_instruction_lookup_elements: &relations::VerifyInstruction,
-    ) -> [E::F; 19] {
-        let M31_0 = E::F::from(M31::from(0));
+        eval: &mut E,
+    ) -> [E::F; 0] {
         let M31_1 = E::F::from(M31::from(1));
-        let M31_2147483646 = E::F::from(M31::from(2147483646));
         let M31_32 = E::F::from(M31::from(32));
         let M31_32767 = E::F::from(M31::from(32767));
         let M31_32769 = E::F::from(M31::from(32769));
@@ -33,7 +31,7 @@ impl DecodeInstruction7Ebc4 {
             verify_instruction_lookup_elements,
             E::EF::one(),
             &[
-                decode_instruction_7ebc4fb565f52942_input.clone(),
+                decode_instruction_7ebc4_input_pc.clone(),
                 M31_32767.clone(),
                 M31_32767.clone(),
                 M31_32769.clone(),
@@ -42,26 +40,6 @@ impl DecodeInstruction7Ebc4 {
             ],
         ));
 
-        [
-            M31_2147483646.clone(),
-            M31_2147483646.clone(),
-            M31_1.clone(),
-            M31_1.clone(),
-            M31_1.clone(),
-            M31_1.clone(),
-            M31_0.clone(),
-            M31_0.clone(),
-            M31_0.clone(),
-            M31_0.clone(),
-            M31_0.clone(),
-            M31_1.clone(),
-            M31_0.clone(),
-            M31_0.clone(),
-            ap_update_add_1_col0.clone(),
-            M31_0.clone(),
-            M31_0.clone(),
-            M31_0.clone(),
-            M31_0.clone(),
-        ]
+        []
     }
 }

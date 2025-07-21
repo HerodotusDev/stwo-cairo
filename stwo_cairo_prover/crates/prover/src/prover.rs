@@ -1,29 +1,25 @@
 use cairo_air::air::{lookup_sum, CairoComponents, CairoInteractionElements};
+use cairo_air::verifier::INTERACTION_POW_BITS;
 use cairo_air::{CairoProof, PreProcessedTraceVariant};
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
+use stwo::core::channel::{Channel, MerkleChannel};
+use stwo::core::fields::qm31::SecureField;
+use stwo::core::fri::FriConfig;
+use stwo::core::pcs::PcsConfig;
+use stwo::core::poly::circle::CanonicCoset;
+use stwo::core::proof_of_work::GrindOps;
+use stwo::prover::backend::simd::SimdBackend;
+use stwo::prover::backend::BackendForChannel;
+use stwo::prover::poly::circle::PolyOps;
+use stwo::prover::{prove, CommitmentSchemeProver, ProvingError};
 use stwo_cairo_adapter::ProverInput;
-use stwo_prover::core::backend::simd::SimdBackend;
-use stwo_prover::core::backend::BackendForChannel;
-use stwo_prover::core::channel::{Channel, MerkleChannel};
-use stwo_prover::core::fields::qm31::SecureField;
-use stwo_prover::core::fri::FriConfig;
-use stwo_prover::core::pcs::{CommitmentSchemeProver, PcsConfig};
-use stwo_prover::core::poly::circle::{CanonicCoset, PolyOps};
-use stwo_prover::core::proof_of_work::GrindOps;
-use stwo_prover::core::prover::{prove, ProvingError};
 use tracing::{event, span, Level};
 
 use crate::witness::cairo::CairoClaimGenerator;
 use crate::witness::utils::witness_trace_cells;
 
 pub(crate) const LOG_MAX_ROWS: u32 = 26;
-
-/// Logup security is defined by the `QM31` space (~124 bits) +
-/// `INTERACTION_POW_BITS` over total number of relation terms. E.g. assuming a 100-bit
-/// security target, the witness may contain up to 1 << (24 + INTERACTION_POW_BITS) relation
-/// terms.
-pub const INTERACTION_POW_BITS: u32 = 24;
 
 pub fn prove_cairo<MC: MerkleChannel>(
     input: ProverInput,
@@ -44,6 +40,7 @@ where
 
     // Setup protocol.
     let channel = &mut MC::C::default();
+    pcs_config.mix_into(channel);
     let mut commitment_scheme =
         CommitmentSchemeProver::<SimdBackend, MC>::new(pcs_config, &twiddles);
 
@@ -182,42 +179,13 @@ pub fn default_prod_prover_parameters() -> ProverParameters {
 #[cfg(test)]
 pub mod tests {
     use cairo_air::preprocessed::testing_preprocessed_tree;
-    use cairo_lang_casm::casm;
-    use stwo_cairo_adapter::plain::input_from_plain_casm;
-    use stwo_cairo_adapter::ProverInput;
-    use test_log::test;
+    use stwo_cairo_adapter::test_utils::{get_test_program, run_program_and_adapter};
 
     use crate::debug_tools::assert_constraints::assert_cairo_constraints;
-    use crate::test_utils::prover_input_from_compiled_cairo_program;
-
-    fn test_basic_cairo_air_input() -> ProverInput {
-        let u128_max = u128::MAX;
-        let instructions = casm! {
-            // TODO(AlonH): Add actual range check segment.
-            // Manually writing range check builtin segment of size 40 to memory.
-            [ap] = u128_max, ap++;
-            [ap + 38] = 1, ap++;
-            ap += 38;
-
-            [ap] = 10, ap++;
-            call rel 4;
-            jmp rel 11;
-
-            jmp rel 4 if [fp-3] != 0;
-            jmp rel 6;
-            [ap] = [fp-3] + (-1), ap++;
-            call rel (-6);
-            ret;
-        }
-        .instructions;
-
-        input_from_plain_casm(instructions)
-    }
-
     #[test]
     fn test_all_cairo_constraints() {
-        let input =
-            prover_input_from_compiled_cairo_program("test_prove_verify_all_opcode_components");
+        let compiled_program = get_test_program("test_prove_verify_all_opcode_components");
+        let input = run_program_and_adapter(&compiled_program);
         let pp_tree = testing_preprocessed_tree(20);
         assert_cairo_constraints(input, pp_tree);
     }
@@ -226,70 +194,98 @@ pub mod tests {
     #[cfg(feature = "nightly")]
     mod nightly_tests {
         use std::io::Write;
+        use std::process::Command;
 
-        use cairo_air::verifier::verify_cairo;
         use cairo_air::PreProcessedTraceVariant;
-        use itertools::Itertools;
+        use stwo::core::fri::FriConfig;
+        use stwo::core::pcs::PcsConfig;
+        use stwo::core::vcs::poseidon252_merkle::Poseidon252MerkleChannel;
         use stwo_cairo_serialize::CairoSerialize;
-        use stwo_prover::core::pcs::PcsConfig;
-        use stwo_prover::core::vcs::poseidon252_merkle::Poseidon252MerkleChannel;
+        use tempfile::NamedTempFile;
         use test_log::test;
 
         use super::*;
         use crate::prover::prove_cairo;
 
         #[test]
-        fn generate_and_serialise_proof() {
-            let preprocessed_trace = PreProcessedTraceVariant::Canonical;
+        fn test_poseidon_e2e_prove_cairo_verify_ret_opcode_components() {
+            let compiled_program = get_test_program("test_prove_verify_ret_opcode");
+            let input = run_program_and_adapter(&compiled_program);
+            let preprocessed_trace = PreProcessedTraceVariant::CanonicalWithoutPedersen;
             let cairo_proof = prove_cairo::<Poseidon252MerkleChannel>(
-                test_basic_cairo_air_input(),
-                PcsConfig::default(),
+                input,
+                PcsConfig {
+                    pow_bits: 6,
+                    fri_config: FriConfig::new(0, 1, 90),
+                },
                 preprocessed_trace,
             )
             .unwrap();
-            let mut output = Vec::new();
-            CairoSerialize::serialize(&cairo_proof, &mut output);
-            let proof_str = output.iter().map(|v| v.to_string()).join(",");
-            let mut file = std::fs::File::create("proof.cairo").unwrap();
-            file.write_all(proof_str.as_bytes()).unwrap();
-            verify_cairo::<Poseidon252MerkleChannel>(
-                cairo_proof,
-                PcsConfig::default(),
-                preprocessed_trace,
-            )
-            .unwrap();
+
+            let mut proof_file = NamedTempFile::new().unwrap();
+            let mut serialized: Vec<starknet_ff::FieldElement> = Vec::new();
+            CairoSerialize::serialize(&cairo_proof, &mut serialized);
+            let proof_hex: Vec<String> = serialized
+                .into_iter()
+                .map(|felt| format!("0x{:x}", felt))
+                .collect();
+            proof_file
+                .write_all(sonic_rs::to_string_pretty(&proof_hex).unwrap().as_bytes())
+                .unwrap();
+
+            let status = Command::new("bash")
+                .arg("-c")
+                .arg(format!(
+                    "(cd ../../../stwo_cairo_verifier; \
+                    scarb execute --package stwo_cairo_verifier \
+                    --arguments-file {} --output standard --target standalone \
+                    --features poseidon252_verifier
+                    )",
+                    proof_file.path().to_str().unwrap()
+                ))
+                .current_dir(env!("CARGO_MANIFEST_DIR"))
+                .status()
+                .unwrap();
+
+            assert!(status.success());
         }
     }
 
     #[cfg(test)]
     #[cfg(feature = "slow-tests")]
     pub mod slow_tests {
+
+        use std::io::Write;
+        use std::process::Command;
+
         use cairo_air::preprocessed::PreProcessedTrace;
         use cairo_air::verifier::verify_cairo;
         use itertools::Itertools;
-        use stwo_cairo_adapter::plain::prover_input_from_vm_output;
-        use stwo_prover::core::pcs::PcsConfig;
-        use stwo_prover::core::vcs::blake2_merkle::Blake2sMerkleChannel;
+        use stwo::core::fri::FriConfig;
+        use stwo::core::pcs::PcsConfig;
+        use stwo::core::vcs::blake2_merkle::Blake2sMerkleChannel;
+        use stwo_cairo_adapter::adapter::read_and_adapt_prover_input_info_file;
+        use stwo_cairo_adapter::test_utils::{get_prover_input_info_path, get_test_program};
+        use stwo_cairo_serialize::CairoSerialize;
+        use tempfile::NamedTempFile;
         use test_log::test;
 
         use super::*;
         use crate::debug_tools::assert_constraints::assert_cairo_constraints;
-        use crate::prover::tests::test_basic_cairo_air_input;
         use crate::prover::{prove_cairo, PreProcessedTraceVariant, ProverInput};
-        use crate::test_utils::get_prover_input_info_path;
 
         // TODO(Ohad): fine-grained constraints tests.
         #[test]
         fn test_cairo_constraints() {
-            let input =
-                prover_input_from_compiled_cairo_program("test_prove_verify_all_opcode_components");
+            let compiled_program = get_test_program("test_prove_verify_all_opcode_components");
+            let input = run_program_and_adapter(&compiled_program);
             assert_cairo_constraints(input, PreProcessedTrace::canonical_without_pedersen());
         }
 
         #[test]
         fn test_prove_verify_all_opcode_components() {
-            let input =
-                prover_input_from_compiled_cairo_program("test_prove_verify_all_opcode_components");
+            let compiled_program = get_test_program("test_prove_verify_all_opcode_components");
+            let input = run_program_and_adapter(&compiled_program);
             for (opcode, n_instances) in &input.state_transitions.casm_states_by_opcode.counts() {
                 assert!(
                     *n_instances > 0,
@@ -304,19 +300,58 @@ pub mod tests {
                 preprocessed_trace,
             )
             .unwrap();
-            verify_cairo::<Blake2sMerkleChannel>(
-                cairo_proof,
-                PcsConfig::default(),
+            verify_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace).unwrap();
+        }
+
+        #[test]
+        fn test_e2e_prove_cairo_verify_all_opcode_components() {
+            let compiled_program = get_test_program("test_prove_verify_all_opcode_components");
+            let input = run_program_and_adapter(&compiled_program);
+            let preprocessed_trace = PreProcessedTraceVariant::Canonical;
+            let cairo_proof = prove_cairo::<Blake2sMerkleChannel>(
+                input,
+                PcsConfig {
+                    pow_bits: 26,
+                    fri_config: FriConfig::new(0, 1, 70),
+                },
                 preprocessed_trace,
             )
             .unwrap();
+
+            let mut proof_file = NamedTempFile::new().unwrap();
+            let mut serialized: Vec<starknet_ff::FieldElement> = Vec::new();
+            CairoSerialize::serialize(&cairo_proof, &mut serialized);
+            let proof_hex: Vec<String> = serialized
+                .into_iter()
+                .map(|felt| format!("0x{:x}", felt))
+                .collect();
+            proof_file
+                .write_all(sonic_rs::to_string_pretty(&proof_hex).unwrap().as_bytes())
+                .unwrap();
+
+            let status = Command::new("bash")
+                .arg("-c")
+                .arg(format!(
+                    "(cd ../../../stwo_cairo_verifier; \
+                    scarb execute --package stwo_cairo_verifier \
+                    --arguments-file {} --output standard --target standalone \
+                    --features qm31_opcode
+                    )",
+                    proof_file.path().to_str().unwrap()
+                ))
+                .current_dir(env!("CARGO_MANIFEST_DIR"))
+                .status()
+                .unwrap();
+
+            assert!(status.success());
         }
 
+        #[ignore = "TODO: move to nightly"]
         #[test]
         fn test_prove_verify_all_opcode_components_from_file() {
             let prover_input_file_path =
                 get_prover_input_info_path("test_prove_verify_all_opcode_components");
-            let input = prover_input_from_vm_output(&prover_input_file_path)
+            let input = read_and_adapt_prover_input_info_file(&prover_input_file_path)
                 .expect("Failed to create prover input from vm output");
             for (opcode, n_instances) in &input.state_transitions.casm_states_by_opcode.counts() {
                 assert!(
@@ -332,25 +367,18 @@ pub mod tests {
                 preprocessed_trace,
             )
             .unwrap();
-            verify_cairo::<Blake2sMerkleChannel>(
-                cairo_proof,
-                PcsConfig::default(),
-                preprocessed_trace,
-            )
-            .unwrap();
+            verify_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace).unwrap();
         }
 
-        // TODO(Ohad): remove ignore.
-        #[ignore = "POW is not deterministic"]
-        #[test]
-        fn test_proof_stability() {
-            let n_proofs_to_compare = 10;
+        fn test_proof_stability(path: &str, n_proofs_to_compare: usize) {
+            let prover_input_file_path = get_prover_input_info_path(path);
+            let input = read_and_adapt_prover_input_info_file(&prover_input_file_path).unwrap();
 
             let proofs = (0..n_proofs_to_compare)
                 .map(|_| {
-                    serde_json::to_string(
+                    sonic_rs::to_string(
                         &prove_cairo::<Blake2sMerkleChannel>(
-                            test_basic_cairo_air_input(),
+                            input.clone(),
                             PcsConfig::default(),
                             PreProcessedTraceVariant::Canonical,
                         )
@@ -363,54 +391,43 @@ pub mod tests {
             assert!(proofs.iter().all_equal());
         }
 
+        #[test]
+        fn test_opcodes_proof_stability() {
+            test_proof_stability("test_prove_verify_all_opcode_components", 2);
+        }
+
+        #[test]
+        fn test_builtins_proof_stability() {
+            test_proof_stability("test_prove_verify_all_builtins", 2);
+        }
+
         /// These tests' inputs were generated using cairo-vm with 50 instances of each builtin.
         pub mod builtin_tests {
-            use std::collections::HashSet;
-            use std::fs::File;
-
-            use stwo_cairo_adapter::builtins::MemorySegmentAddresses;
-            use stwo_cairo_adapter::memory::MemoryEntryIter;
+            use stwo_cairo_adapter::test_utils::run_program_and_adapter;
             use test_log::test;
 
             use super::*;
-            use crate::test_utils::prover_input_from_compiled_cairo_program;
 
             /// Asserts that all supported builtins are present in the input.
             /// Panics if any of the builtins is missing.
             fn assert_all_builtins_in_input(input: &ProverInput) {
-                let empty_builtins: HashSet<_> = input
+                let empty_builtins: Vec<_> = input
                     .builtins_segments
                     .get_counts()
-                    .iter()
-                    .filter(|&(_, &count)| count == 0)
-                    .map(|(name, _)| format!("{:?}", name))
+                    .into_iter()
+                    .filter(|(_, count)| *count == 0)
+                    .map(|(name, _)| name)
                     .collect();
 
-                let non_supported_builtins: HashSet<_> = ["keccak", "ecdsa", "ec_op"]
-                    .iter()
-                    .map(|&name| name.to_string())
-                    .collect();
-
-                if empty_builtins != non_supported_builtins {
-                    let missing: Vec<_> = non_supported_builtins
-                        .difference(&empty_builtins)
-                        .cloned()
-                        .collect();
-                    let extra: Vec<_> = empty_builtins
-                        .difference(&non_supported_builtins)
-                        .cloned()
-                        .collect();
-                    panic!(
-                        "Mismatch in empty builtins: missing {:?}, extra {:?}",
-                        missing, extra
-                    );
+                if !empty_builtins.is_empty() {
+                    panic!("Builtins missing in the input: {:?}", empty_builtins);
                 }
             }
 
             #[test]
             fn test_prove_verify_all_builtins() {
-                let input =
-                    prover_input_from_compiled_cairo_program("test_prove_verify_all_builtins");
+                let compiled_program = get_test_program("test_prove_verify_all_builtins");
+                let input = run_program_and_adapter(&compiled_program);
                 assert_all_builtins_in_input(&input);
                 let preprocessed_trace = PreProcessedTraceVariant::Canonical;
                 let cairo_proof = prove_cairo::<Blake2sMerkleChannel>(
@@ -419,37 +436,14 @@ pub mod tests {
                     preprocessed_trace,
                 )
                 .unwrap();
-                verify_cairo::<Blake2sMerkleChannel>(
-                    cairo_proof,
-                    PcsConfig::default(),
-                    preprocessed_trace,
-                )
-                .unwrap();
-            }
-
-            /// Asserts that there is an unused `add` value in the first instance in bitwise
-            /// builtin segment, inducing a "hole".
-            fn assert_bitwise_builtin_has_holes(
-                test_name: &str,
-                bitwise_segment: &Option<MemorySegmentAddresses>,
-            ) {
-                let bitwise_segment = bitwise_segment.as_ref().unwrap();
-                let mut d = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-                d.push("../../test_data/");
-                d.push(test_name);
-                let mut memory_file =
-                    std::io::BufReader::new(File::open(d.join("mem").as_path()).unwrap());
-                let memory_entries = MemoryEntryIter(&mut memory_file).collect_vec();
-                assert!(memory_entries
-                    .iter()
-                    .all(|entry| entry.address != (bitwise_segment.begin_addr + 2) as u64));
+                verify_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace).unwrap();
             }
 
             #[test]
             fn test_prove_verify_all_builtins_from_file() {
                 let prover_input_file_path =
                     get_prover_input_info_path("test_prove_verify_all_builtins");
-                let input = prover_input_from_vm_output(&prover_input_file_path)
+                let input = read_and_adapt_prover_input_info_file(&prover_input_file_path)
                     .expect("Failed to create prover input from vm output");
                 assert_all_builtins_in_input(&input);
                 let preprocessed_trace = PreProcessedTraceVariant::Canonical;
@@ -459,50 +453,41 @@ pub mod tests {
                     preprocessed_trace,
                 )
                 .unwrap();
-                verify_cairo::<Blake2sMerkleChannel>(
-                    cairo_proof,
-                    PcsConfig::default(),
-                    preprocessed_trace,
-                )
-                .unwrap();
+                verify_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace).unwrap();
             }
 
             #[test]
             fn test_add_mod_builtin_constraints() {
-                let input =
-                    prover_input_from_compiled_cairo_program("test_prove_verify_add_mod_builtin");
+                let compiled_program = get_test_program("test_prove_verify_add_mod_builtin");
+                let input = run_program_and_adapter(&compiled_program);
                 assert_cairo_constraints(input, PreProcessedTrace::canonical_without_pedersen());
             }
 
             #[test]
             fn test_bitwise_builtin_constraints() {
-                let input =
-                    prover_input_from_compiled_cairo_program("test_prove_verify_bitwise_builtin");
-                assert_bitwise_builtin_has_holes(
-                    "test_prove_verify_bitwise_builtin",
-                    &input.builtins_segments.bitwise,
-                );
+                let compiled_program = get_test_program("test_prove_verify_bitwise_builtin");
+                let input = run_program_and_adapter(&compiled_program);
                 assert_cairo_constraints(input, testing_preprocessed_tree(19));
             }
 
             #[test]
             fn test_mul_mod_builtin_constraints() {
-                let input =
-                    prover_input_from_compiled_cairo_program("test_prove_verify_mul_mod_builtin");
+                let compiled_program = get_test_program("test_prove_verify_mul_mod_builtin");
+                let input = run_program_and_adapter(&compiled_program);
                 assert_cairo_constraints(input, testing_preprocessed_tree(19));
             }
 
             #[test]
             fn test_pedersen_builtin_constraints() {
-                let input =
-                    prover_input_from_compiled_cairo_program("test_prove_verify_pedersen_builtin");
+                let compiled_program = get_test_program("test_prove_verify_pedersen_builtin");
+                let input = run_program_and_adapter(&compiled_program);
                 assert_cairo_constraints(input, PreProcessedTrace::canonical());
             }
 
             #[test]
             fn test_poseidon_builtin_constraints() {
-                let input =
-                    prover_input_from_compiled_cairo_program("test_prove_verify_poseidon_builtin");
+                let compiled_program = get_test_program("test_prove_verify_poseidon_builtin");
+                let input = run_program_and_adapter(&compiled_program);
                 assert_cairo_constraints(input, testing_preprocessed_tree(19));
             }
 
@@ -510,24 +495,24 @@ pub mod tests {
             fn test_poseidon_builtin_constraints_from_file() {
                 let prover_input_file_path =
                     get_prover_input_info_path("test_prove_verify_poseidon_builtin");
-                let input = prover_input_from_vm_output(&prover_input_file_path)
+                let input = read_and_adapt_prover_input_info_file(&prover_input_file_path)
                     .expect("Failed to create prover input from vm output");
                 assert_cairo_constraints(input, testing_preprocessed_tree(19));
             }
 
             #[test]
             fn test_range_check_bits_96_builtin_constraints() {
-                let input = prover_input_from_compiled_cairo_program(
-                    "test_prove_verify_range_check_bits_96_builtin",
-                );
+                let compiled_program =
+                    get_test_program("test_prove_verify_range_check_bits_96_builtin");
+                let input = run_program_and_adapter(&compiled_program);
                 assert_cairo_constraints(input, testing_preprocessed_tree(19));
             }
 
             #[test]
             fn test_range_check_bits_128_builtin_constraints() {
-                let input = prover_input_from_compiled_cairo_program(
-                    "test_prove_verify_range_check_bits_128_builtin",
-                );
+                let compiled_program =
+                    get_test_program("test_prove_verify_range_check_bits_128_builtin");
+                let input = run_program_and_adapter(&compiled_program);
                 assert_cairo_constraints(input, testing_preprocessed_tree(19));
             }
         }

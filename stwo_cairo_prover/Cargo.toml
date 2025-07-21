@@ -7,8 +7,8 @@ members = [
     "crates/cairo-serialize-derive",
     "crates/utils",
     "crates/common",
-    "crates/recursion_bridge",
     "crates/cairo-air",
+    "crates/dev_utils",
 ]
 resolver = "2"
 
@@ -21,7 +21,7 @@ bytemuck = { version = "1.20.0", features = ["derive"] }
 cairo-lang-casm = "2.7.1"
 # TODO(yuval): Use an official version, not a specific commit.
 # Note: This revision does not originate from the main branch but from 'starkware-development'.
-cairo-vm = { git = "https://github.com/lambdaclass/cairo-vm", rev = "1d70783", features = [
+cairo-vm = { git = "https://github.com/lambdaclass/cairo-vm", rev = "b1a91f929b5fa29a1a2e9e6990a68a1220c0c673", features = [
     "mod_builtin",
 ], default-features = false }
 clap = { version = "4.3.10", features = ["derive"] }
@@ -35,6 +35,7 @@ rand = "0.8.5"
 ruint = "1.12.3"
 serde = "1.0.207"
 serde_json = "1.0.1"
+sonic-rs = "0.3.17"
 starknet-ff = "0.3.7"
 starknet-types-core = "0.1.7"
 stwo_cairo_prover = { path = "crates/prover", version = "~0.1.0" }
@@ -43,26 +44,39 @@ stwo-cairo-adapter = { path = "crates/adapter" }
 stwo-cairo-common = { path = "crates/common" }
 cairo-air = { path = "crates/cairo-air" }
 stwo-cairo-serialize = { path = "crates/cairo-serialize", version = "~0.1.0" }
-# TODO(ShaharS): take stwo version from the source repository.
-stwo-prover = { git = "https://github.com/starkware-libs/stwo", rev = "045963c", features = [
+# TODO(Ohad): re export stwo from constraint-framework.
+# TODO(Ohad): separate cairo-air from prover code and use prover features only in the prover crate.
+stwo = { git = "https://github.com/starkware-libs/stwo", rev = "4e0bbe7", features = [
     "parallel",
+    "prover",
 ], default-features = false }
-stwo-air-utils-derive = { git = "https://github.com/starkware-libs/stwo", rev = "045963c" }
-stwo-air-utils = { git = "https://github.com/starkware-libs/stwo", rev = "045963c" }
+stwo-constraint-framework = { git = "https://github.com/starkware-libs/stwo", rev = "4e0bbe7", features = [
+    "parallel",
+    "prover",
+] }
+stwo-air-utils-derive = { git = "https://github.com/starkware-libs/stwo", rev = "4e0bbe7" }
+stwo-air-utils = { git = "https://github.com/starkware-libs/stwo", rev = "4e0bbe7" }
 test-case = "3.3.1"
-thiserror = { version = "2.0.10", default-features = false }
+thiserror = { version = "2.0.12", default-features = false }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 serde_arrays = "0.1.0"
+rayon = "1.10.0"
+indoc = "2.0.6"
 
 [profile.bench]
 codegen-units = 1
 lto = true
 
-# Optimize witness generation and FFTs. This is usually enough to run the tests without stack overflows, 
-# while maintaining a reasonable compile time. 
+# Optimize witness generation and FFTs. This is usually enough to run the tests without stack overflows,
+# while maintaining a reasonable compile time.
 # In the cases where it's not enough, try to manually increase the stack size,
 # See cairo-ci.yaml for an example command.
 [profile.witness-opt-1]
 inherits = "dev"
-package = { "stwo_cairo_prover" = { opt-level = 1 }, "stwo-prover" = { opt-level = 1 } }
+package = { "stwo_cairo_prover" = { opt-level = 1 }, "stwo" = { opt-level = 1 } }
+
+[profile.adapter-release]
+inherits = "dev"
+package = { "stwo-cairo-adapter" = { opt-level = 3 } }
+debug-assertions = false

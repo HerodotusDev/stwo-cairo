@@ -5,6 +5,7 @@ use cairo_vm::types::relocatable::MaybeRelocatable;
 use cairo_vm::vm::trace::trace_entry::TraceEntry;
 use stwo_cairo_common::memory::MEMORY_ADDRESS_BOUND;
 use stwo_cairo_common::prover_types::simd::N_LANES;
+use tracing::{span, Level};
 
 use crate::builtins::MemorySegmentAddresses;
 use crate::memory::{MemoryEntry, F252};
@@ -29,6 +30,7 @@ impl Relocator {
         relocatable_mem: Vec<Vec<Option<MaybeRelocatable>>>,
         builtins_segments_indices: BTreeMap<usize, BuiltinName>,
     ) -> Self {
+        let _span = span!(Level::INFO, "Relocator::new").entered();
         let address_base = 1;
         let mut relocation_table = vec![address_base];
 
@@ -87,15 +89,21 @@ impl Relocator {
 
     /// Get a list of relocated addresses and values for the memory.
     pub fn get_relocated_memory(&self) -> Vec<MemoryEntry> {
+        let _span = span!(Level::INFO, "get_relocated_memory").entered();
         let mut res = vec![];
         for (segment_index, _) in self.relocatable_mem.iter().enumerate() {
             res.extend(self.get_relocated_segment(segment_index));
         }
+        assert!(
+            res.len() <= MEMORY_ADDRESS_BOUND,
+            "Relocated memory size exceeded the maximum address value",
+        );
         res
     }
 
     // Return the segment info (start_address, exclusive end_address) for each builtin.
     pub fn get_builtin_segments(&self) -> BuiltinSegments {
+        let _span = span!(Level::INFO, "get_builtin_segments").entered();
         let mut res = BuiltinSegments::default();
         for (segment_index, builtin_name) in self.builtins_segments_indices.iter() {
             let start_addr = self.relocation_table[*segment_index];
@@ -112,14 +120,14 @@ impl Relocator {
             match builtin_name {
                 BuiltinName::range_check => res.range_check_bits_128 = segment,
                 BuiltinName::pedersen => res.pedersen = segment,
-                BuiltinName::ecdsa => res.ecdsa = segment,
-                BuiltinName::keccak => res.keccak = segment,
                 BuiltinName::bitwise => res.bitwise = segment,
-                BuiltinName::ec_op => res.ec_op = segment,
                 BuiltinName::poseidon => res.poseidon = segment,
                 BuiltinName::range_check96 => res.range_check_bits_96 = segment,
                 BuiltinName::add_mod => res.add_mod = segment,
                 BuiltinName::mul_mod => res.mul_mod = segment,
+                BuiltinName::ecdsa | BuiltinName::keccak | BuiltinName::ec_op => {
+                    panic!("Builtin {} is not supported in Stwo", builtin_name)
+                }
                 // Not builtins.
                 BuiltinName::output | BuiltinName::segment_arena => {}
             };
@@ -128,6 +136,7 @@ impl Relocator {
     }
 
     pub fn relocate_trace(&self, relocatble_trace: &[TraceEntry]) -> Vec<RelocatedTraceEntry> {
+        let _span = span!(Level::INFO, "relocate_trace").entered();
         let mut res = vec![];
         for entry in relocatble_trace {
             res.push(RelocatedTraceEntry {
@@ -146,6 +155,7 @@ impl Relocator {
         &self,
         public_addresses: BTreeMap<usize, Vec<usize>>,
     ) -> Vec<u32> {
+        let _span = span!(Level::INFO, "relocate_public_addresses").entered();
         let mut res = vec![];
         for (segment_index, offsets) in public_addresses {
             let base_addr = self.relocation_table[segment_index];
@@ -369,7 +379,6 @@ pub mod relocator_tests {
                 stop_ptr: 97
             })
         );
-        assert_eq!(builtins_segments.ecdsa, None);
     }
 
     #[test]

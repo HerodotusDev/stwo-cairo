@@ -1,25 +1,55 @@
+// AIR version d3fb930e
 use crate::components::prelude::*;
 use crate::components::subroutines::decode_instruction_d2a10::DecodeInstructionD2A10;
+use crate::components::subroutines::range_check_ap::RangeCheckAp;
 use crate::components::subroutines::read_small::ReadSmall;
 
-pub const N_TRACE_COLUMNS: usize = 14;
+pub const N_TRACE_COLUMNS: usize = 15;
+pub const RELATION_USES_PER_ROW: [RelationUse; 6] = [
+    RelationUse {
+        relation_id: "MemoryAddressToId",
+        uses: 1,
+    },
+    RelationUse {
+        relation_id: "MemoryIdToBig",
+        uses: 1,
+    },
+    RelationUse {
+        relation_id: "Opcodes",
+        uses: 1,
+    },
+    RelationUse {
+        relation_id: "RangeCheck_19",
+        uses: 1,
+    },
+    RelationUse {
+        relation_id: "RangeCheck_8",
+        uses: 1,
+    },
+    RelationUse {
+        relation_id: "VerifyInstruction",
+        uses: 1,
+    },
+];
 
 pub struct Eval {
     pub claim: Claim,
     pub verify_instruction_lookup_elements: relations::VerifyInstruction,
     pub memory_address_to_id_lookup_elements: relations::MemoryAddressToId,
     pub memory_id_to_big_lookup_elements: relations::MemoryIdToBig,
+    pub range_check_19_lookup_elements: relations::RangeCheck_19,
+    pub range_check_8_lookup_elements: relations::RangeCheck_8,
     pub opcodes_lookup_elements: relations::Opcodes,
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct Claim {
     pub log_size: u32,
 }
 impl Claim {
     pub fn log_sizes(&self) -> TreeVec<Vec<u32>> {
         let trace_log_sizes = vec![self.log_size; N_TRACE_COLUMNS];
-        let interaction_log_sizes = vec![self.log_size; SECURE_EXTENSION_DEGREE * 3];
+        let interaction_log_sizes = vec![self.log_size; SECURE_EXTENSION_DEGREE * 4];
         TreeVec::new(vec![vec![], trace_log_sizes, interaction_log_sizes])
     }
 
@@ -28,7 +58,7 @@ impl Claim {
     }
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct InteractionClaim {
     pub claimed_sum: SecureField,
 }
@@ -67,50 +97,60 @@ impl FrameworkEval for Eval {
         let op1_limb_0_col10 = eval.next_trace_mask();
         let op1_limb_1_col11 = eval.next_trace_mask();
         let op1_limb_2_col12 = eval.next_trace_mask();
+        let range_check_ap_bot8bits_col13 = eval.next_trace_mask();
         let enabler = eval.next_trace_mask();
 
         eval.add_constraint(enabler.clone() * enabler.clone() - enabler.clone());
 
         #[allow(clippy::unused_unit)]
         #[allow(unused_variables)]
-        let [decode_instruction_d2a10_output_tmp_c921e_5_limb_0, decode_instruction_d2a10_output_tmp_c921e_5_limb_1, decode_instruction_d2a10_output_tmp_c921e_5_limb_2, decode_instruction_d2a10_output_tmp_c921e_5_limb_3, decode_instruction_d2a10_output_tmp_c921e_5_limb_4, decode_instruction_d2a10_output_tmp_c921e_5_limb_5, decode_instruction_d2a10_output_tmp_c921e_5_limb_6, decode_instruction_d2a10_output_tmp_c921e_5_limb_7, decode_instruction_d2a10_output_tmp_c921e_5_limb_8, decode_instruction_d2a10_output_tmp_c921e_5_limb_9, decode_instruction_d2a10_output_tmp_c921e_5_limb_10, decode_instruction_d2a10_output_tmp_c921e_5_limb_11, decode_instruction_d2a10_output_tmp_c921e_5_limb_12, decode_instruction_d2a10_output_tmp_c921e_5_limb_13, decode_instruction_d2a10_output_tmp_c921e_5_limb_14, decode_instruction_d2a10_output_tmp_c921e_5_limb_15, decode_instruction_d2a10_output_tmp_c921e_5_limb_16, decode_instruction_d2a10_output_tmp_c921e_5_limb_17, decode_instruction_d2a10_output_tmp_c921e_5_limb_18] =
+        let [decode_instruction_d2a10_output_tmp_c921e_5_offset2, decode_instruction_d2a10_output_tmp_c921e_5_op1_base_ap] =
             DecodeInstructionD2A10::evaluate(
-                input_pc_col0.clone(),
+                [input_pc_col0.clone()],
                 offset2_col3.clone(),
                 op1_imm_col4.clone(),
                 op1_base_fp_col5.clone(),
-                &mut eval,
                 &self.verify_instruction_lookup_elements,
+                &mut eval,
             );
         // if imm then offset2 is 1.
         eval.add_constraint(
             (op1_imm_col4.clone()
-                * (M31_1.clone() - decode_instruction_d2a10_output_tmp_c921e_5_limb_2.clone())),
+                * (M31_1.clone() - decode_instruction_d2a10_output_tmp_c921e_5_offset2.clone())),
         );
         // mem1_base.
         eval.add_constraint(
             (mem1_base_col6.clone()
                 - (((op1_imm_col4.clone() * input_pc_col0.clone())
                     + (op1_base_fp_col5.clone() * input_fp_col2.clone()))
-                    + (decode_instruction_d2a10_output_tmp_c921e_5_limb_7.clone()
+                    + (decode_instruction_d2a10_output_tmp_c921e_5_op1_base_ap.clone()
                         * input_ap_col1.clone()))),
         );
         #[allow(clippy::unused_unit)]
         #[allow(unused_variables)]
-        let [read_small_output_tmp_c921e_11_limb_0, read_small_output_tmp_c921e_11_limb_1] =
-            ReadSmall::evaluate(
-                (mem1_base_col6.clone()
-                    + decode_instruction_d2a10_output_tmp_c921e_5_limb_2.clone()),
-                op1_id_col7.clone(),
-                msb_col8.clone(),
-                mid_limbs_set_col9.clone(),
-                op1_limb_0_col10.clone(),
-                op1_limb_1_col11.clone(),
-                op1_limb_2_col12.clone(),
-                &mut eval,
-                &self.memory_address_to_id_lookup_elements,
-                &self.memory_id_to_big_lookup_elements,
-            );
+        let [read_small_output_tmp_c921e_11_limb_0] = ReadSmall::evaluate(
+            [(mem1_base_col6.clone()
+                + decode_instruction_d2a10_output_tmp_c921e_5_offset2.clone())],
+            op1_id_col7.clone(),
+            msb_col8.clone(),
+            mid_limbs_set_col9.clone(),
+            op1_limb_0_col10.clone(),
+            op1_limb_1_col11.clone(),
+            op1_limb_2_col12.clone(),
+            &self.memory_address_to_id_lookup_elements,
+            &self.memory_id_to_big_lookup_elements,
+            &mut eval,
+        );
+        let next_ap_tmp_c921e_12 = eval.add_intermediate(
+            (input_ap_col1.clone() + read_small_output_tmp_c921e_11_limb_0.clone()),
+        );
+        RangeCheckAp::evaluate(
+            [next_ap_tmp_c921e_12.clone()],
+            range_check_ap_bot8bits_col13.clone(),
+            &self.range_check_19_lookup_elements,
+            &self.range_check_8_lookup_elements,
+            &mut eval,
+        );
         eval.add_to_relation(RelationEntry::new(
             &self.opcodes_lookup_elements,
             E::EF::from(enabler.clone()),
@@ -126,7 +166,7 @@ impl FrameworkEval for Eval {
             -E::EF::from(enabler.clone()),
             &[
                 (input_pc_col0.clone() + (M31_1.clone() + op1_imm_col4.clone())),
-                (input_ap_col1.clone() + read_small_output_tmp_c921e_11_limb_0.clone()),
+                next_ap_tmp_c921e_12.clone(),
                 input_fp_col2.clone(),
             ],
         ));
@@ -141,8 +181,8 @@ mod tests {
     use num_traits::Zero;
     use rand::rngs::SmallRng;
     use rand::{Rng, SeedableRng};
-    use stwo_prover::constraint_framework::expr::ExprEvaluator;
-    use stwo_prover::core::fields::qm31::QM31;
+    use stwo::core::fields::qm31::QM31;
+    use stwo_constraint_framework::expr::ExprEvaluator;
 
     use super::*;
     use crate::components::constraints_regression_test_values::ADD_AP_OPCODE;
@@ -155,6 +195,8 @@ mod tests {
             verify_instruction_lookup_elements: relations::VerifyInstruction::dummy(),
             memory_address_to_id_lookup_elements: relations::MemoryAddressToId::dummy(),
             memory_id_to_big_lookup_elements: relations::MemoryIdToBig::dummy(),
+            range_check_19_lookup_elements: relations::RangeCheck_19::dummy(),
+            range_check_8_lookup_elements: relations::RangeCheck_8::dummy(),
             opcodes_lookup_elements: relations::Opcodes::dummy(),
         };
         let expr_eval = eval.evaluate(ExprEvaluator::new());

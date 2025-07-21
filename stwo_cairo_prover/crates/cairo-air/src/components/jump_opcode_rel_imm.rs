@@ -3,6 +3,24 @@ use crate::components::subroutines::decode_instruction_7ebc4::DecodeInstruction7
 use crate::components::subroutines::read_small::ReadSmall;
 
 pub const N_TRACE_COLUMNS: usize = 11;
+pub const RELATION_USES_PER_ROW: [RelationUse; 4] = [
+    RelationUse {
+        relation_id: "MemoryAddressToId",
+        uses: 1,
+    },
+    RelationUse {
+        relation_id: "MemoryIdToBig",
+        uses: 1,
+    },
+    RelationUse {
+        relation_id: "Opcodes",
+        uses: 1,
+    },
+    RelationUse {
+        relation_id: "VerifyInstruction",
+        uses: 1,
+    },
+];
 
 pub struct Eval {
     pub claim: Claim,
@@ -12,7 +30,7 @@ pub struct Eval {
     pub opcodes_lookup_elements: relations::Opcodes,
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct Claim {
     pub log_size: u32,
 }
@@ -28,7 +46,7 @@ impl Claim {
     }
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct InteractionClaim {
     pub claimed_sum: SecureField,
 }
@@ -68,30 +86,26 @@ impl FrameworkEval for Eval {
 
         eval.add_constraint(enabler.clone() * enabler.clone() - enabler.clone());
 
+        DecodeInstruction7Ebc4::evaluate(
+            [input_pc_col0.clone()],
+            ap_update_add_1_col3.clone(),
+            &self.verify_instruction_lookup_elements,
+            &mut eval,
+        );
         #[allow(clippy::unused_unit)]
         #[allow(unused_variables)]
-        let [decode_instruction_7ebc4_output_tmp_81a39_3_limb_0, decode_instruction_7ebc4_output_tmp_81a39_3_limb_1, decode_instruction_7ebc4_output_tmp_81a39_3_limb_2, decode_instruction_7ebc4_output_tmp_81a39_3_limb_3, decode_instruction_7ebc4_output_tmp_81a39_3_limb_4, decode_instruction_7ebc4_output_tmp_81a39_3_limb_5, decode_instruction_7ebc4_output_tmp_81a39_3_limb_6, decode_instruction_7ebc4_output_tmp_81a39_3_limb_7, decode_instruction_7ebc4_output_tmp_81a39_3_limb_8, decode_instruction_7ebc4_output_tmp_81a39_3_limb_9, decode_instruction_7ebc4_output_tmp_81a39_3_limb_10, decode_instruction_7ebc4_output_tmp_81a39_3_limb_11, decode_instruction_7ebc4_output_tmp_81a39_3_limb_12, decode_instruction_7ebc4_output_tmp_81a39_3_limb_13, decode_instruction_7ebc4_output_tmp_81a39_3_limb_14, decode_instruction_7ebc4_output_tmp_81a39_3_limb_15, decode_instruction_7ebc4_output_tmp_81a39_3_limb_16, decode_instruction_7ebc4_output_tmp_81a39_3_limb_17, decode_instruction_7ebc4_output_tmp_81a39_3_limb_18] =
-            DecodeInstruction7Ebc4::evaluate(
-                input_pc_col0.clone(),
-                ap_update_add_1_col3.clone(),
-                &mut eval,
-                &self.verify_instruction_lookup_elements,
-            );
-        #[allow(clippy::unused_unit)]
-        #[allow(unused_variables)]
-        let [read_small_output_tmp_81a39_9_limb_0, read_small_output_tmp_81a39_9_limb_1] =
-            ReadSmall::evaluate(
-                (input_pc_col0.clone() + M31_1.clone()),
-                next_pc_id_col4.clone(),
-                msb_col5.clone(),
-                mid_limbs_set_col6.clone(),
-                next_pc_limb_0_col7.clone(),
-                next_pc_limb_1_col8.clone(),
-                next_pc_limb_2_col9.clone(),
-                &mut eval,
-                &self.memory_address_to_id_lookup_elements,
-                &self.memory_id_to_big_lookup_elements,
-            );
+        let [read_small_output_tmp_81a39_9_limb_0] = ReadSmall::evaluate(
+            [(input_pc_col0.clone() + M31_1.clone())],
+            next_pc_id_col4.clone(),
+            msb_col5.clone(),
+            mid_limbs_set_col6.clone(),
+            next_pc_limb_0_col7.clone(),
+            next_pc_limb_1_col8.clone(),
+            next_pc_limb_2_col9.clone(),
+            &self.memory_address_to_id_lookup_elements,
+            &self.memory_id_to_big_lookup_elements,
+            &mut eval,
+        );
         eval.add_to_relation(RelationEntry::new(
             &self.opcodes_lookup_elements,
             E::EF::from(enabler.clone()),
@@ -122,8 +136,8 @@ mod tests {
     use num_traits::Zero;
     use rand::rngs::SmallRng;
     use rand::{Rng, SeedableRng};
-    use stwo_prover::constraint_framework::expr::ExprEvaluator;
-    use stwo_prover::core::fields::qm31::QM31;
+    use stwo::core::fields::qm31::QM31;
+    use stwo_constraint_framework::expr::ExprEvaluator;
 
     use super::*;
     use crate::components::constraints_regression_test_values::JUMP_OPCODE_REL_IMM;

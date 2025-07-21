@@ -1,14 +1,14 @@
 mod json;
 
 use std::fs::{read_to_string, File};
-use std::io::Read;
 use std::path::Path;
 
-use bytemuck::{bytes_of_mut, Pod, Zeroable};
+use bytemuck::{cast_slice, Pod, Zeroable};
 use cairo_vm::air_public_input::{PublicInput, PublicInputError};
 use cairo_vm::stdlib::collections::HashMap;
 use itertools::{IntoChunks, Itertools};
 use json::PrivateInput;
+use memmap2::Mmap;
 use stwo_cairo_common::memory::MEMORY_ADDRESS_BOUND;
 use thiserror::Error;
 use tracing::{span, Level};
@@ -18,7 +18,8 @@ use super::memory::MemoryConfig;
 use super::opcodes::StateTransitions;
 use super::ProverInput;
 use crate::builtins::MemorySegmentAddresses;
-use crate::memory::{MemoryBuilder, MemoryEntryIter};
+use crate::memory::{MemoryBuilder, MemoryEntry};
+use crate::PublicSegmentContext;
 
 #[derive(Debug, Error)]
 pub enum VmImportError {
@@ -61,6 +62,9 @@ fn deserialize_inputs<'a>(
 
 /// Adapts the VM's output files to the Cairo input of the prover.
 /// TODO(Stav): delete when 'adapt_prover_input_info_vm_output' is used.
+///
+/// # Assumptions
+/// - The arguments are the artifacts of a bootloader execution, using every builtin.
 pub fn adapt_vm_output(
     public_input_json: &Path,
     private_input_json: &Path,
@@ -101,59 +105,52 @@ pub fn adapt_vm_output(
         .unwrap()
         .join(&private_input.trace_path);
 
-    let mut memory_file =
-        std::io::BufReader::new(File::open(memory_path.as_path()).unwrap_or_else(|_| {
-            panic!(
-                "Unable to open memory file at path {}",
-                memory_path.display()
-            )
-        }));
-    let mut trace_file =
-        std::io::BufReader::new(File::open(trace_path.as_path()).unwrap_or_else(|_| {
-            panic!("Unable to open trace file at path {}", trace_path.display())
-        }));
+    let memory = MmappedFile::<MemoryEntry>::new(memory_path.as_path());
+    let trace = MmappedFile::<RelocatedTraceEntry>::new(trace_path.as_path());
 
     let public_memory_addresses = public_input
         .public_memory
         .iter()
         .map(|entry| entry.address as u32)
         .collect();
+
+    let public_segment_context = PublicSegmentContext::bootloader_context();
     let res = adapt_to_stwo_input(
-        TraceIter(&mut trace_file),
-        MemoryBuilder::from_iter(MemoryConfig::default(), MemoryEntryIter(&mut memory_file)),
+        trace.as_slice(),
+        MemoryBuilder::from_iter(MemoryConfig::default(), memory.as_slice().iter().copied()),
         public_memory_addresses,
         &public_input
             .memory_segments
             .into_iter()
             .map(|(k, v)| (k, v.into()))
             .collect(),
+        public_segment_context,
     );
     res
 }
 
-/// Creates Cairo input for Stwo, utilized by:
-/// - `adapt_vm_output` in the prover.
-/// - `adapt_finished_runner` in the validator. TODO(Stav): delete when
-///   'adapt_prover_input_info_vm_output' is used.
+/// Creates Cairo input for Stwo, utilized by `adapt_vm_output` in the prover.
+/// TODO(Stav): delete when 'adapt_prover_input_info_vm_output' is used.
 pub fn adapt_to_stwo_input(
-    trace_iter: impl Iterator<Item = RelocatedTraceEntry>,
+    trace: &[RelocatedTraceEntry],
     mut memory: MemoryBuilder,
     public_memory_addresses: Vec<u32>,
     memory_segments: &HashMap<&str, MemorySegmentAddresses>,
+    public_segment_context: PublicSegmentContext,
 ) -> Result<ProverInput, VmImportError> {
-    let (state_transitions, instruction_by_pc) =
-        StateTransitions::from_iter(trace_iter, &mut memory);
+    let state_transitions = StateTransitions::from_slice_parallel(trace, &memory);
     let mut builtins_segments = BuiltinSegments::from_memory_segments(memory_segments);
     builtins_segments.fill_memory_holes(&mut memory);
     builtins_segments.pad_builtin_segments(&mut memory);
-    let memory = memory.build();
+    let (memory, inst_cache) = memory.build();
 
     Ok(ProverInput {
         state_transitions,
-        instruction_by_pc,
         memory,
+        inst_cache,
         public_memory_addresses,
         builtins_segments,
+        public_segment_context,
     })
 }
 
@@ -200,17 +197,8 @@ pub fn adapt_vm_output_shards(
         .unwrap()
         .join(&private_input.trace_path);
 
-    let mut memory_file =
-        std::io::BufReader::new(File::open(memory_path.as_path()).unwrap_or_else(|_| {
-            panic!(
-                "Unable to open memory file at path {}",
-                memory_path.display()
-            )
-        }));
-    let mut trace_file =
-        std::io::BufReader::new(File::open(trace_path.as_path()).unwrap_or_else(|_| {
-            panic!("Unable to open trace file at path {}", trace_path.display())
-        }));
+    let memory = MmappedFile::<MemoryEntry>::new(memory_path.as_path());
+    let trace = MmappedFile::<RelocatedTraceEntry>::new(trace_path.as_path());
 
     let public_memory_addresses = public_input
         .public_memory
@@ -218,8 +206,8 @@ pub fn adapt_vm_output_shards(
         .map(|entry| entry.address as u32)
         .collect();
     let res = adapt_to_stwo_input_shards(
-        TraceIter(&mut trace_file).into_iter().skip(5).chunks(shard_size),
-        MemoryBuilder::from_iter(MemoryConfig::default(), MemoryEntryIter(&mut memory_file)),
+        trace.as_slice().iter().copied().skip(5).chunks(shard_size),
+        MemoryBuilder::from_iter(MemoryConfig::default(), memory.as_slice().iter().copied()),
         public_memory_addresses,
         &public_input
             .memory_segments
@@ -250,26 +238,52 @@ pub fn adapt_to_stwo_input_shards(
 
     for chunk in chunks {
         let final_state = *chunk.last().unwrap();
-        let (state_transitions, instruction_by_pc) = StateTransitions::from_iter(
+        let state_transitions = StateTransitions::from_iter(
             vec![prev_final_state].into_iter().chain(chunk.into_iter()),
             &mut memory,
         );
         prev_final_state = final_state;
-        transitions.push((state_transitions, instruction_by_pc));
+        transitions.push(state_transitions);
     }
 
-    let memory = memory.build();
+    let (memory, inst_cache) = memory.build();
 
+    let public_segment_context = PublicSegmentContext::bootloader_context();
     Ok(transitions
         .into_iter()
-        .map(|(state_transitions, instruction_by_pc)| ProverInput {
+        .map(|state_transitions| ProverInput {
+            inst_cache: inst_cache.to_owned(),
+            public_segment_context: public_segment_context.to_owned(),
             state_transitions,
-            instruction_by_pc,
             memory: memory.to_owned(),
             public_memory_addresses: public_memory_addresses.to_owned(),
             builtins_segments: BuiltinSegments::default(),
         })
         .collect())
+}
+
+struct MmappedFile<T: Pod> {
+    mmap: Mmap,
+    _marker: std::marker::PhantomData<T>,
+}
+impl<T: Pod> MmappedFile<T> {
+    fn new(path: &Path) -> Self {
+        let file = File::open(path)
+            .unwrap_or_else(|_| panic!("Unable to open file at path {}", path.display()));
+        let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
+        assert!(
+            mmap.len().is_multiple_of(std::mem::size_of::<T>()),
+            "File size is not a multiple of the type size"
+        );
+        Self {
+            mmap,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    fn as_slice(&self) -> &[T] {
+        cast_slice(&self.mmap)
+    }
 }
 
 /// A single entry from the trace file.
@@ -288,18 +302,5 @@ impl From<cairo_vm::vm::trace::trace_entry::RelocatedTraceEntry> for RelocatedTr
             fp: entry.fp,
             pc: entry.pc,
         }
-    }
-}
-
-pub struct TraceIter<'a, R: Read>(pub &'a mut R);
-impl<R: Read> Iterator for TraceIter<'_, R> {
-    type Item = RelocatedTraceEntry;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut entry = RelocatedTraceEntry::default();
-        self.0
-            .read_exact(bytes_of_mut(&mut entry))
-            .ok()
-            .map(|_| entry)
     }
 }

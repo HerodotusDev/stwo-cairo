@@ -3,6 +3,20 @@ use crate::components::subroutines::decode_instruction_161c9::DecodeInstruction1
 use crate::components::subroutines::mem_verify_equal::MemVerifyEqual;
 
 pub const N_TRACE_COLUMNS: usize = 9;
+pub const RELATION_USES_PER_ROW: [RelationUse; 3] = [
+    RelationUse {
+        relation_id: "MemoryAddressToId",
+        uses: 2,
+    },
+    RelationUse {
+        relation_id: "Opcodes",
+        uses: 1,
+    },
+    RelationUse {
+        relation_id: "VerifyInstruction",
+        uses: 1,
+    },
+];
 
 pub struct Eval {
     pub claim: Claim,
@@ -11,7 +25,7 @@ pub struct Eval {
     pub opcodes_lookup_elements: relations::Opcodes,
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct Claim {
     pub log_size: u32,
 }
@@ -27,7 +41,7 @@ impl Claim {
     }
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct InteractionClaim {
     pub claimed_sum: SecureField,
 }
@@ -68,14 +82,14 @@ impl FrameworkEval for Eval {
 
         #[allow(clippy::unused_unit)]
         #[allow(unused_variables)]
-        let [decode_instruction_161c9_output_tmp_bb09e_5_limb_0, decode_instruction_161c9_output_tmp_bb09e_5_limb_1, decode_instruction_161c9_output_tmp_bb09e_5_limb_2, decode_instruction_161c9_output_tmp_bb09e_5_limb_3, decode_instruction_161c9_output_tmp_bb09e_5_limb_4, decode_instruction_161c9_output_tmp_bb09e_5_limb_5, decode_instruction_161c9_output_tmp_bb09e_5_limb_6, decode_instruction_161c9_output_tmp_bb09e_5_limb_7, decode_instruction_161c9_output_tmp_bb09e_5_limb_8, decode_instruction_161c9_output_tmp_bb09e_5_limb_9, decode_instruction_161c9_output_tmp_bb09e_5_limb_10, decode_instruction_161c9_output_tmp_bb09e_5_limb_11, decode_instruction_161c9_output_tmp_bb09e_5_limb_12, decode_instruction_161c9_output_tmp_bb09e_5_limb_13, decode_instruction_161c9_output_tmp_bb09e_5_limb_14, decode_instruction_161c9_output_tmp_bb09e_5_limb_15, decode_instruction_161c9_output_tmp_bb09e_5_limb_16, decode_instruction_161c9_output_tmp_bb09e_5_limb_17, decode_instruction_161c9_output_tmp_bb09e_5_limb_18] =
+        let [decode_instruction_161c9_output_tmp_bb09e_5_offset0] =
             DecodeInstruction161C9::evaluate(
-                input_pc_col0.clone(),
+                [input_pc_col0.clone()],
                 offset0_col3.clone(),
                 dst_base_fp_col4.clone(),
                 ap_update_add_1_col5.clone(),
-                &mut eval,
                 &self.verify_instruction_lookup_elements,
+                &mut eval,
             );
         // mem_dst_base.
         eval.add_constraint(
@@ -86,12 +100,12 @@ impl FrameworkEval for Eval {
         MemVerifyEqual::evaluate(
             [
                 (mem_dst_base_col6.clone()
-                    + decode_instruction_161c9_output_tmp_bb09e_5_limb_0.clone()),
+                    + decode_instruction_161c9_output_tmp_bb09e_5_offset0.clone()),
                 (input_pc_col0.clone() + M31_1.clone()),
             ],
             dst_id_col7.clone(),
-            &mut eval,
             &self.memory_address_to_id_lookup_elements,
+            &mut eval,
         );
         eval.add_to_relation(RelationEntry::new(
             &self.opcodes_lookup_elements,
@@ -123,8 +137,8 @@ mod tests {
     use num_traits::Zero;
     use rand::rngs::SmallRng;
     use rand::{Rng, SeedableRng};
-    use stwo_prover::constraint_framework::expr::ExprEvaluator;
-    use stwo_prover::core::fields::qm31::QM31;
+    use stwo::core::fields::qm31::QM31;
+    use stwo_constraint_framework::expr::ExprEvaluator;
 
     use super::*;
     use crate::components::constraints_regression_test_values::ASSERT_EQ_OPCODE_IMM;

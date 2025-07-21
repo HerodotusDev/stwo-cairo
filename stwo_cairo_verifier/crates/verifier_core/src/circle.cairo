@@ -6,9 +6,8 @@ use crate::circle_mul_table::{
     M31_CIRCLE_GEN_MUL_TABLE_BITS_6_TO_11,
 };
 use crate::fields::Invertible;
-use crate::fields::cm31::CM31;
 use crate::fields::m31::M31;
-use crate::fields::qm31::{P4, QM31, QM31Trait};
+use crate::fields::qm31::{QM31, QM31Trait};
 use super::utils::pow2;
 
 /// A generator for the circle group over [`M31`].
@@ -39,7 +38,7 @@ pub trait CirclePointTrait<
         CirclePoint { x: One::one(), y: Zero::zero() }
     }
 
-    /// Applies the circle's x-coordinate doubling map.
+    /// Computes the x-coordinate of the doubling map. Depends only on the pre-image x-coordinate.
     fn double_x(x: F) -> F {
         let sqx = x * x;
         sqx + sqx - One::one()
@@ -52,10 +51,10 @@ pub trait CirclePointTrait<
         self: @CirclePoint<F>,
     ) -> u32 {
         // we only need the x-coordinate to check order since the only point
-        // with x=1 is the circle's identity
+        // with x=1 is the circle's identity.
         let mut res = 0;
-        let mut cur = self.x.clone();
-        while cur != One::one() {
+        let mut cur = *self.x;
+        while !cur.is_one() {
             cur = Self::double_x(cur);
             res += 1;
         }
@@ -95,7 +94,7 @@ pub impl CirclePointQM31Impl of CirclePointTrait<QM31> {}
 pub impl ChannelGetRandomCirclePointImpl of ChannelGetRandomCirclePointTrait {
     /// Returns a random QM31 circle point.
     fn get_random_point(ref self: Channel) -> CirclePoint<QM31> {
-        let t = self.draw_felt();
+        let t: QM31 = self.draw_secure_felt();
         let t_squared = t * t;
         let t_squared_plus_1_inv = (t_squared + One::one()).inverse();
         let x = (One::one() - t_squared) * t_squared_plus_1_inv;
@@ -104,43 +103,30 @@ pub impl ChannelGetRandomCirclePointImpl of ChannelGetRandomCirclePointTrait {
     }
 }
 
-impl CirclePointQM31PartialOrd of PartialOrd<CirclePoint<QM31>> {
-    fn lt(lhs: CirclePoint<QM31>, rhs: CirclePoint<QM31>) -> bool {
-        lhs.x < rhs.x || (lhs.x == rhs.x && lhs.y < rhs.y)
-    }
-}
-
-#[generate_trait]
-pub impl ComplexConjugateImpl of ComplexConjugateTrait {
-    fn complex_conjugate(self: CirclePoint<QM31>) -> CirclePoint<QM31> {
-        CirclePoint { x: self.x.complex_conjugate(), y: self.y.complex_conjugate() }
-    }
-}
-
 /// Represents the coset `initial + <step>`.
 #[derive(Copy, Clone, Debug, PartialEq, Drop)]
 pub struct Coset {
     pub initial_index: CirclePointIndex,
-    pub step_size: CirclePointIndex,
+    pub step: CirclePointIndex,
     pub log_size: u32,
 }
 
 #[generate_trait]
 pub impl CosetImpl of CosetTrait {
     fn new(initial_index: CirclePointIndex, log_size: u32) -> Coset {
-        let step_size = CirclePointIndexImpl::subgroup_gen(log_size);
-        Coset { initial_index, step_size, log_size }
+        let step = CirclePointIndexImpl::subgroup_gen(log_size);
+        Coset { initial_index, step, log_size }
     }
 
     fn index_at(self: @Coset, index: usize) -> CirclePointIndex {
-        *self.initial_index + self.step_size.mul(index)
+        *self.initial_index + self.step.mul(index)
     }
 
     fn double(self: @Coset) -> Coset {
         assert!(*self.log_size > 0);
         Coset {
             initial_index: *self.initial_index + *self.initial_index,
-            step_size: *self.step_size + *self.step_size,
+            step: *self.step + *self.step,
             log_size: *self.log_size - 1,
         }
     }
@@ -157,15 +143,19 @@ pub impl CosetImpl of CosetTrait {
 
     /// Creates a coset of the form `G_2n + <G_n>`.
     ///
-    /// For example, for `n=8`, we get the point indices `[1,3,5,7,9,11,13,15]`.
+    /// For example, let n = 8 and denote G_16 = x, <G_8> = <2x>.
+    /// The point indices are `[x, 3x, 5x, 7x, 9x, 11x, 13x, 15x]`.
     fn odds(log_size: u32) -> Coset {
         Self::new(CirclePointIndexImpl::subgroup_gen(log_size + 1), log_size)
     }
 
-    /// Creates a coset of the form `G_4n + <G_n>`.
+    /// Creates a coset of the form `G_4n + <G_n>`. It's conjugate is `3 * G_4n + <G_n>`.
     ///
-    /// For example, for `n=8`, we get the point indices `[1,5,9,13,17,21,25,29]`.
-    /// Its conjugate will be `[3,7,11,15,19,23,27,31]`.
+    /// For example, let n = 8 and denote G_32 = x, <G_8> = <4x>.
+    /// The point indices are `[x, 5x, 9x, 13x, 17x, 21x, 25x, 29x]`.
+    /// Conjugate coset indices are `[3x, 7x, 11x, 15x, 19x, 23x, 27x, 31x]`.
+    ///
+    /// Note: This coset union with its conjugate coset is the `odds(log_size + 1)` coset.
     fn half_odds(log_size: u32) -> Coset {
         Self::new(CirclePointIndexImpl::subgroup_gen(log_size + 2), log_size)
     }
@@ -222,7 +212,8 @@ pub impl CirclePointIndexImpl of CirclePointIndexTrait {
         // Start with MSBs since small domains (more common) have LSBs equal 0.
         let (bits_24_to_31, bits_0_to_23) = DivRem::div_rem(*self.index, NZ_2_POW_24);
         let (bits_30_to_31, bits_24_to_29) = DivRem::div_rem(bits_24_to_31, NZ_2_POW_6);
-        let mut res = *M31_CIRCLE_GEN_MUL_TABLE_BITS_24_TO_29.span()[bits_24_to_29];
+        let mut res: CirclePoint<M31> = *M31_CIRCLE_GEN_MUL_TABLE_BITS_24_TO_29
+            .span()[bits_24_to_29];
         if bits_0_to_23 != 0 {
             let (bits_18_to_23, bits_0_to_17) = DivRem::div_rem(bits_0_to_23, NZ_2_POW_18);
             res = res + *M31_CIRCLE_GEN_MUL_TABLE_BITS_18_TO_23.span()[bits_18_to_23];
@@ -272,137 +263,3 @@ impl CirclePointIndexPartialEx of PartialEq<CirclePointIndex> {
         lhs.index() != rhs.index()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::fields::m31::m31;
-    use super::{
-        CirclePoint, CirclePointIndex, CirclePointIndexImpl, CirclePointM31Impl,
-        CirclePointQM31AddCirclePointM31Impl, CirclePointQM31Impl, Coset, CosetImpl, M31_CIRCLE_GEN,
-    };
-
-
-    #[test]
-    fn test_to_point() {
-        let index = CirclePointIndex { index: 0b01111111111111111111111111111111 };
-        assert_eq!(index.to_point(), -M31_CIRCLE_GEN);
-        let index = CirclePointIndex { index: 0b00111111111111111111111111111111 };
-        assert_eq!(index.to_point(), CirclePoint { x: -M31_CIRCLE_GEN.x, y: M31_CIRCLE_GEN.y });
-    }
-
-
-    #[test]
-    fn test_to_point_with_unreduced_index() {
-        // All 32 bits are `1`.
-        let index = CirclePointIndex { index: 0b11111111111111111111111111111111 };
-
-        assert_eq!(index.to_point(), -M31_CIRCLE_GEN);
-    }
-
-    #[test]
-    fn test_add_1() {
-        let g4 = CirclePoint { x: m31(0), y: m31(1) };
-        assert_eq!(g4 + g4, CirclePoint { x: -m31(1), y: m31(0) });
-    }
-
-    #[test]
-    fn test_add_2() {
-        let point_1 = CirclePoint { x: m31(750649172), y: m31(1991648574) };
-        let point_2 = CirclePoint { x: m31(1737427771), y: m31(309481134) };
-
-        let result = point_1 + point_2;
-
-        assert_eq!(result, CirclePoint { x: m31(1476625263), y: m31(1040927458) });
-    }
-
-    #[test]
-    fn test_zero_1() {
-        let result = CirclePointM31Impl::zero();
-
-        assert_eq!(result, CirclePoint { x: m31(1), y: m31(0) });
-    }
-
-    #[test]
-    fn test_zero_2() {
-        let point_1 = CirclePoint { x: m31(750649172), y: m31(1991648574) };
-        let point_2 = CirclePointM31Impl::zero();
-
-        let result = point_1 + point_2;
-
-        assert_eq!(result, point_1.clone());
-    }
-
-    #[test]
-    fn test_coset_index_at() {
-        let coset = Coset {
-            initial_index: CirclePointIndexImpl::new(16777216),
-            log_size: 5,
-            step_size: CirclePointIndexImpl::new(67108864),
-        };
-
-        let result = coset.index_at(8);
-
-        assert_eq!(result, CirclePointIndexImpl::new(553648128));
-    }
-
-    #[test]
-    fn test_coset_constructor() {
-        let result = CosetImpl::new(CirclePointIndexImpl::new(16777216), 5);
-
-        assert_eq!(
-            result,
-            Coset {
-                initial_index: CirclePointIndexImpl::new(16777216),
-                log_size: 5,
-                step_size: CirclePointIndexImpl::new(67108864),
-            },
-        );
-    }
-
-    #[test]
-    fn test_coset_double() {
-        let coset = Coset {
-            initial_index: CirclePointIndexImpl::new(16777216),
-            step_size: CirclePointIndexImpl::new(67108864),
-            log_size: 5,
-        };
-
-        let result = coset.double();
-
-        assert_eq!(
-            result,
-            Coset {
-                initial_index: CirclePointIndexImpl::new(33554432),
-                step_size: CirclePointIndexImpl::new(134217728),
-                log_size: 4,
-            },
-        );
-    }
-
-    #[test]
-    fn test_coset_at() {
-        let coset = Coset {
-            initial_index: CirclePointIndexImpl::new(16777216),
-            step_size: CirclePointIndexImpl::new(67108864),
-            log_size: 5,
-        };
-
-        let result = coset.at(17);
-
-        assert_eq!(result, CirclePoint { x: m31(7144319), y: m31(1742797653) });
-    }
-
-    #[test]
-    fn test_coset_size() {
-        let coset = Coset {
-            initial_index: CirclePointIndexImpl::new(16777216),
-            step_size: CirclePointIndexImpl::new(67108864),
-            log_size: 5,
-        };
-
-        let result = coset.size();
-
-        assert_eq!(result, 32);
-    }
-}
-

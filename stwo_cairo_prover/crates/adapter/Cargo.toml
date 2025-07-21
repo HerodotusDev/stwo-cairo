@@ -12,6 +12,7 @@ std = ["dep:sonic-rs"]
 bytemuck.workspace = true
 cairo-lang-casm.workspace = true
 cairo-vm.workspace = true
+indoc.workspace = true
 itertools.workspace = true
 log.workspace = true
 serde.workspace = true
@@ -20,7 +21,12 @@ stwo-cairo-common.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
 sonic-rs = { version = "0.3.17", optional = true }
-stwo-prover.workspace = true
+stwo.workspace = true
+memmap2 = "0.9.5"
+bincode = { version = "2.0.1", features = ["serde"] }
+dashmap = "6.1.0"
+rayon.workspace = true
+crypto-bigint = "0.5.1"
 
 [dev-dependencies]
 cairo-lang-casm.workspace = true

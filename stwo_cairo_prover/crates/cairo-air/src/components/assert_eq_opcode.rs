@@ -3,6 +3,20 @@ use crate::components::subroutines::decode_instruction_fe864::DecodeInstructionF
 use crate::components::subroutines::mem_verify_equal::MemVerifyEqual;
 
 pub const N_TRACE_COLUMNS: usize = 12;
+pub const RELATION_USES_PER_ROW: [RelationUse; 3] = [
+    RelationUse {
+        relation_id: "MemoryAddressToId",
+        uses: 2,
+    },
+    RelationUse {
+        relation_id: "Opcodes",
+        uses: 1,
+    },
+    RelationUse {
+        relation_id: "VerifyInstruction",
+        uses: 1,
+    },
+];
 
 pub struct Eval {
     pub claim: Claim,
@@ -11,7 +25,7 @@ pub struct Eval {
     pub opcodes_lookup_elements: relations::Opcodes,
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct Claim {
     pub log_size: u32,
 }
@@ -27,7 +41,7 @@ impl Claim {
     }
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct InteractionClaim {
     pub claimed_sum: SecureField,
 }
@@ -70,16 +84,16 @@ impl FrameworkEval for Eval {
 
         #[allow(clippy::unused_unit)]
         #[allow(unused_variables)]
-        let [decode_instruction_fe864_output_tmp_d6f03_7_limb_0, decode_instruction_fe864_output_tmp_d6f03_7_limb_1, decode_instruction_fe864_output_tmp_d6f03_7_limb_2, decode_instruction_fe864_output_tmp_d6f03_7_limb_3, decode_instruction_fe864_output_tmp_d6f03_7_limb_4, decode_instruction_fe864_output_tmp_d6f03_7_limb_5, decode_instruction_fe864_output_tmp_d6f03_7_limb_6, decode_instruction_fe864_output_tmp_d6f03_7_limb_7, decode_instruction_fe864_output_tmp_d6f03_7_limb_8, decode_instruction_fe864_output_tmp_d6f03_7_limb_9, decode_instruction_fe864_output_tmp_d6f03_7_limb_10, decode_instruction_fe864_output_tmp_d6f03_7_limb_11, decode_instruction_fe864_output_tmp_d6f03_7_limb_12, decode_instruction_fe864_output_tmp_d6f03_7_limb_13, decode_instruction_fe864_output_tmp_d6f03_7_limb_14, decode_instruction_fe864_output_tmp_d6f03_7_limb_15, decode_instruction_fe864_output_tmp_d6f03_7_limb_16, decode_instruction_fe864_output_tmp_d6f03_7_limb_17, decode_instruction_fe864_output_tmp_d6f03_7_limb_18] =
+        let [decode_instruction_fe864_output_tmp_d6f03_7_offset0, decode_instruction_fe864_output_tmp_d6f03_7_offset2, decode_instruction_fe864_output_tmp_d6f03_7_op1_base_ap] =
             DecodeInstructionFe864::evaluate(
-                input_pc_col0.clone(),
+                [input_pc_col0.clone()],
                 offset0_col3.clone(),
                 offset2_col4.clone(),
                 dst_base_fp_col5.clone(),
                 op1_base_fp_col6.clone(),
                 ap_update_add_1_col7.clone(),
-                &mut eval,
                 &self.verify_instruction_lookup_elements,
+                &mut eval,
             );
         // mem_dst_base.
         eval.add_constraint(
@@ -91,19 +105,19 @@ impl FrameworkEval for Eval {
         eval.add_constraint(
             (mem1_base_col9.clone()
                 - ((op1_base_fp_col6.clone() * input_fp_col2.clone())
-                    + (decode_instruction_fe864_output_tmp_d6f03_7_limb_7.clone()
+                    + (decode_instruction_fe864_output_tmp_d6f03_7_op1_base_ap.clone()
                         * input_ap_col1.clone()))),
         );
         MemVerifyEqual::evaluate(
             [
                 (mem_dst_base_col8.clone()
-                    + decode_instruction_fe864_output_tmp_d6f03_7_limb_0.clone()),
+                    + decode_instruction_fe864_output_tmp_d6f03_7_offset0.clone()),
                 (mem1_base_col9.clone()
-                    + decode_instruction_fe864_output_tmp_d6f03_7_limb_2.clone()),
+                    + decode_instruction_fe864_output_tmp_d6f03_7_offset2.clone()),
             ],
             dst_id_col10.clone(),
-            &mut eval,
             &self.memory_address_to_id_lookup_elements,
+            &mut eval,
         );
         eval.add_to_relation(RelationEntry::new(
             &self.opcodes_lookup_elements,
@@ -135,8 +149,8 @@ mod tests {
     use num_traits::Zero;
     use rand::rngs::SmallRng;
     use rand::{Rng, SeedableRng};
-    use stwo_prover::constraint_framework::expr::ExprEvaluator;
-    use stwo_prover::core::fields::qm31::QM31;
+    use stwo::core::fields::qm31::QM31;
+    use stwo_constraint_framework::expr::ExprEvaluator;
 
     use super::*;
     use crate::components::constraints_regression_test_values::ASSERT_EQ_OPCODE;

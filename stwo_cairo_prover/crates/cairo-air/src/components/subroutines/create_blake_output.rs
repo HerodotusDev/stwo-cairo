@@ -1,6 +1,6 @@
 use crate::components::prelude::*;
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct CreateBlakeOutput {}
 
 impl CreateBlakeOutput {
@@ -28,9 +28,9 @@ impl CreateBlakeOutput {
         triple_xor_32_output_limb_1_col13: E::F,
         triple_xor_32_output_limb_0_col14: E::F,
         triple_xor_32_output_limb_1_col15: E::F,
-        eval: &mut E,
         triple_xor_32_lookup_elements: &relations::TripleXor32,
-    ) -> [E::F; 16] {
+        eval: &mut E,
+    ) -> [E::F; 0] {
         eval.add_to_relation(RelationEntry::new(
             triple_xor_32_lookup_elements,
             E::EF::one(),
@@ -151,23 +151,6 @@ impl CreateBlakeOutput {
             ],
         ));
 
-        [
-            triple_xor_32_output_limb_0_col0.clone(),
-            triple_xor_32_output_limb_1_col1.clone(),
-            triple_xor_32_output_limb_0_col2.clone(),
-            triple_xor_32_output_limb_1_col3.clone(),
-            triple_xor_32_output_limb_0_col4.clone(),
-            triple_xor_32_output_limb_1_col5.clone(),
-            triple_xor_32_output_limb_0_col6.clone(),
-            triple_xor_32_output_limb_1_col7.clone(),
-            triple_xor_32_output_limb_0_col8.clone(),
-            triple_xor_32_output_limb_1_col9.clone(),
-            triple_xor_32_output_limb_0_col10.clone(),
-            triple_xor_32_output_limb_1_col11.clone(),
-            triple_xor_32_output_limb_0_col12.clone(),
-            triple_xor_32_output_limb_1_col13.clone(),
-            triple_xor_32_output_limb_0_col14.clone(),
-            triple_xor_32_output_limb_1_col15.clone(),
-        ]
+        []
     }
 }

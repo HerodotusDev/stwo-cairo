@@ -5,18 +5,18 @@ use stwo_constraint_framework::{
 use stwo_verifier_core::channel::{Channel, ChannelTrait};
 use stwo_verifier_core::circle::CirclePoint;
 use stwo_verifier_core::fields::m31::m31;
-use stwo_verifier_core::fields::qm31::{QM31, QM31_EXTENSION_DEGREE};
+use stwo_verifier_core::fields::qm31::{QM31, QM31Serde, QM31_EXTENSION_DEGREE};
 use stwo_verifier_core::poly::circle::CanonicCosetImpl;
 use stwo_verifier_core::utils::{ArrayImpl, pow2};
 use stwo_verifier_core::{ColumnArray, ColumnSpan, TreeArray};
-use crate::components::CairoComponent;
-use crate::utils::{U32Impl, UsizeExTrait};
+use crate::cairo_component::CairoComponent;
+use crate::utils::UsizeExTrait;
 use super::super::Invertible;
 
 mod constraints;
 
 /// Split the (ID , Multiplicity) columns to shorter chunks. This is done to improve the performance
-/// during The merkle commitment and FRI, as this component is usually the tallest in the Cairo AIR.
+/// during The Merkle commitment and FRI, as this component is usually the tallest in the Cairo AIR.
 ///
 /// 1. The ID and Multiplicity vectors are split to 'MEMORY_ADDRESS_TO_ID_SPLIT' chunks of size
 ///    `ids.len()`/`MEMORY_ADDRESS_TO_ID_SPLIT`.
@@ -28,9 +28,11 @@ mod constraints;
 /// ID1 = [id3, id4, id5, 0]
 /// ID2 = [id6, id7, id8, 0]
 /// ID3 = [id9, id10, 0, 0]
+pub const LOG_MEMORY_ADDRESS_TO_ID_SPLIT: u32 = 3;
 pub const MEMORY_ADDRESS_TO_ID_SPLIT: usize = 8;
 pub const N_ID_AND_MULT_COLUMNS_PER_CHUNK: usize = 2;
 pub const N_TRACE_COLUMNS: usize = MEMORY_ADDRESS_TO_ID_SPLIT * N_ID_AND_MULT_COLUMNS_PER_CHUNK;
+pub const RELATION_USES_PER_ROW: [(felt252, u32); 0] = [];
 
 #[derive(Drop, Serde, Copy)]
 pub struct Claim {
@@ -83,7 +85,7 @@ pub impl ComponentImpl of CairoComponent<Component> {
         point: CirclePoint<QM31>,
     ) {
         let log_size = *self.claim.log_size;
-        let trace_gen = CanonicCosetImpl::new(log_size).coset.step_size;
+        let trace_gen = CanonicCosetImpl::new(log_size).coset.step;
         constraints::mask_points(
             ref preprocessed_column_set,
             ref trace_mask_points,
@@ -115,7 +117,7 @@ pub impl ComponentImpl of CairoComponent<Component> {
         let log_size = *self.claim.log_size;
 
         let params = constraints::ConstraintParams {
-            log_size,
+            column_size: pow2(log_size).try_into().unwrap(),
             MemoryAddressToId_alpha0: addr_to_id_alpha_0,
             MemoryAddressToId_alpha1: addr_to_id_alpha_1,
             MemoryAddressToId_z: addr_to_id_z,

@@ -1,21 +1,23 @@
-use cairo_air::preprocessed::PreProcessedTrace;
-use stwo_prover::core::backend::simd::SimdBackend;
-use stwo_prover::core::backend::BackendForChannel;
-use stwo_prover::core::channel::MerkleChannel;
-use stwo_prover::core::pcs::CommitmentTreeProver;
-use stwo_prover::core::poly::circle::{CanonicCoset, PolyOps};
-use stwo_prover::core::vcs::ops::MerkleHasher;
+use cairo_air::PreProcessedTraceVariant;
+use stwo::core::channel::MerkleChannel;
+use stwo::core::poly::circle::CanonicCoset;
+use stwo::core::vcs::MerkleHasher;
+use stwo::prover::backend::simd::SimdBackend;
+use stwo::prover::backend::BackendForChannel;
+use stwo::prover::poly::circle::PolyOps;
+use stwo::prover::CommitmentTreeProver;
 
 /// Generates the root of the preprocessed trace commitment tree for a given `log_blowup_factor`.
 // TODO(Shahars): remove allow.
 #[allow(unused)]
 pub fn generate_preprocessed_commitment_root<MC: MerkleChannel>(
     log_blowup_factor: u32,
+    preprocessed_trace: PreProcessedTraceVariant,
 ) -> <<MC as MerkleChannel>::H as MerkleHasher>::Hash
 where
     SimdBackend: BackendForChannel<MC>,
 {
-    let preprocessed_trace = PreProcessedTrace::canonical();
+    let preprocessed_trace = preprocessed_trace.to_preprocessed_trace();
 
     // Precompute twiddles for the commitment scheme.
     let max_log_size = preprocessed_trace.log_sizes().into_iter().max().unwrap();
@@ -40,16 +42,19 @@ where
 #[cfg(feature = "slow-tests")]
 #[test]
 fn test_canonical_preprocessed_root_regression() {
-    use stwo_prover::core::vcs::blake2_hash::Blake2sHash;
-    use stwo_prover::core::vcs::blake2_merkle::Blake2sMerkleChannel;
+    use stwo::core::vcs::blake2_hash::Blake2sHash;
+    use stwo::core::vcs::blake2_merkle::Blake2sMerkleChannel;
 
     let log_blowup_factor = 1;
     let expected = Blake2sHash::from(
-        hex::decode("3ffa9700d8252fdb94e39fa9eed90cdf49f42992d3f84c006ac653d09054167b")
+        hex::decode("ef02228a59997c478853657909348a95fd09ec87abf834708503721ed40af070")
             .expect("Invalid hex string"),
     );
 
-    let root = generate_preprocessed_commitment_root::<Blake2sMerkleChannel>(log_blowup_factor);
+    let root = generate_preprocessed_commitment_root::<Blake2sMerkleChannel>(
+        log_blowup_factor,
+        PreProcessedTraceVariant::Canonical,
+    );
 
     assert_eq!(root, expected);
 }

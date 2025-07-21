@@ -1,20 +1,18 @@
 use itertools::{chain, Itertools};
 use num_traits::One;
 use serde::{Deserialize, Serialize};
-use starknet_ff::FieldElement;
+use stwo::core::channel::Channel;
+use stwo::core::fields::m31::M31;
+use stwo::core::fields::qm31::{SecureField, SECURE_EXTENSION_DEGREE};
+use stwo::core::pcs::TreeVec;
 use stwo_cairo_adapter::memory::LARGE_MEMORY_VALUE_ID_BASE;
 use stwo_cairo_common::memory::{N_M31_IN_FELT252, N_M31_IN_SMALL_FELT252};
-use stwo_cairo_serialize::CairoSerialize;
-use stwo_prover::constraint_framework::{
-    EvalAtRow, FrameworkComponent, FrameworkEval, RelationEntry,
+use stwo_cairo_serialize::{CairoDeserialize, CairoSerialize};
+use stwo_constraint_framework::{
+    relation, EvalAtRow, FrameworkComponent, FrameworkEval, RelationEntry, TraceLocationAllocator,
 };
-use stwo_prover::core::channel::Channel;
-use stwo_prover::core::fields::m31::M31;
-use stwo_prover::core::fields::qm31::SecureField;
-use stwo_prover::core::fields::secure_column::SECURE_EXTENSION_DEGREE;
-use stwo_prover::core::pcs::TreeVec;
-use stwo_prover::relation;
 
+use super::prelude::RelationUse;
 use crate::preprocessed::{PreProcessedColumn, Seq};
 use crate::relations;
 
@@ -29,6 +27,60 @@ pub type SmallComponent = FrameworkComponent<SmallEval>;
 
 const N_LOGUP_POWERS: usize = MEMORY_ID_SIZE + N_M31_IN_FELT252;
 
+pub const RELATION_USES_PER_ROW_BIG: [RelationUse; 8] = [
+    RelationUse {
+        relation_id: "RangeCheck_9_9",
+        uses: 2,
+    },
+    RelationUse {
+        relation_id: "RangeCheck_9_9_B",
+        uses: 2,
+    },
+    RelationUse {
+        relation_id: "RangeCheck_9_9_C",
+        uses: 2,
+    },
+    RelationUse {
+        relation_id: "RangeCheck_9_9_D",
+        uses: 2,
+    },
+    RelationUse {
+        relation_id: "RangeCheck_9_9_E",
+        uses: 2,
+    },
+    RelationUse {
+        relation_id: "RangeCheck_9_9_F",
+        uses: 2,
+    },
+    RelationUse {
+        relation_id: "RangeCheck_9_9_G",
+        uses: 1,
+    },
+    RelationUse {
+        relation_id: "RangeCheck_9_9_H",
+        uses: 1,
+    },
+];
+
+pub const RELATION_USES_PER_ROW_SMALL: [RelationUse; 4] = [
+    RelationUse {
+        relation_id: "RangeCheck_9_9",
+        uses: 1,
+    },
+    RelationUse {
+        relation_id: "RangeCheck_9_9_B",
+        uses: 1,
+    },
+    RelationUse {
+        relation_id: "RangeCheck_9_9_C",
+        uses: 1,
+    },
+    RelationUse {
+        relation_id: "RangeCheck_9_9_D",
+        uses: 1,
+    },
+];
+
 relation!(RelationElements, N_LOGUP_POWERS);
 
 /// IDs are continuous and start from 0.
@@ -36,19 +88,45 @@ relation!(RelationElements, N_LOGUP_POWERS);
 #[derive(Clone)]
 pub struct BigEval {
     pub log_n_rows: u32,
+    // Internal offset of the ids when there are multiple components.
+    pub offset: u32,
     pub lookup_elements: relations::MemoryIdToBig,
-    pub range9_9_lookup_elements: relations::RangeCheck_9_9,
+    pub range_check_9_9_lookup_elements: relations::RangeCheck_9_9,
+    pub range_check_9_9_b_lookup_elements: relations::RangeCheck_9_9_B,
+    pub range_check_9_9_c_lookup_elements: relations::RangeCheck_9_9_C,
+    pub range_check_9_9_d_lookup_elements: relations::RangeCheck_9_9_D,
+    pub range_check_9_9_e_lookup_elements: relations::RangeCheck_9_9_E,
+    pub range_check_9_9_f_lookup_elements: relations::RangeCheck_9_9_F,
+    pub range_check_9_9_g_lookup_elements: relations::RangeCheck_9_9_G,
+    pub range_check_9_9_h_lookup_elements: relations::RangeCheck_9_9_H,
 }
+#[allow(clippy::too_many_arguments)]
 impl BigEval {
     pub fn new(
-        claim: Claim,
+        log_n_rows: u32,
+        offset: u32,
         lookup_elements: relations::MemoryIdToBig,
-        range9_9_lookup_elements: relations::RangeCheck_9_9,
+        range_check_9_9_lookup_elements: relations::RangeCheck_9_9,
+        range_check_9_9_b_lookup_elements: relations::RangeCheck_9_9_B,
+        range_check_9_9_c_lookup_elements: relations::RangeCheck_9_9_C,
+        range_check_9_9_d_lookup_elements: relations::RangeCheck_9_9_D,
+        range_check_9_9_e_lookup_elements: relations::RangeCheck_9_9_E,
+        range_check_9_9_f_lookup_elements: relations::RangeCheck_9_9_F,
+        range_check_9_9_g_lookup_elements: relations::RangeCheck_9_9_G,
+        range_check_9_9_h_lookup_elements: relations::RangeCheck_9_9_H,
     ) -> Self {
         Self {
-            log_n_rows: claim.big_log_size,
+            log_n_rows,
+            offset,
             lookup_elements,
-            range9_9_lookup_elements,
+            range_check_9_9_lookup_elements,
+            range_check_9_9_b_lookup_elements,
+            range_check_9_9_c_lookup_elements,
+            range_check_9_9_d_lookup_elements,
+            range_check_9_9_e_lookup_elements,
+            range_check_9_9_f_lookup_elements,
+            range_check_9_9_g_lookup_elements,
+            range_check_9_9_h_lookup_elements,
         }
     }
 }
@@ -68,16 +146,59 @@ impl FrameworkEval for BigEval {
         let multiplicity = eval.next_trace_mask();
 
         // Range check limbs.
-        for (l, r) in value.iter().tuples() {
-            eval.add_to_relation(RelationEntry::new(
-                &self.range9_9_lookup_elements,
-                E::EF::one(),
-                &[l.clone(), r.clone()],
-            ));
+        for (i, (l, r)) in value.iter().tuples().enumerate() {
+            let limb_pair = [l.clone(), r.clone()];
+            match i % 8 {
+                0 => eval.add_to_relation(RelationEntry::new(
+                    &self.range_check_9_9_lookup_elements,
+                    E::EF::one(),
+                    &limb_pair,
+                )),
+                1 => eval.add_to_relation(RelationEntry::new(
+                    &self.range_check_9_9_b_lookup_elements,
+                    E::EF::one(),
+                    &limb_pair,
+                )),
+                2 => eval.add_to_relation(RelationEntry::new(
+                    &self.range_check_9_9_c_lookup_elements,
+                    E::EF::one(),
+                    &limb_pair,
+                )),
+                3 => eval.add_to_relation(RelationEntry::new(
+                    &self.range_check_9_9_d_lookup_elements,
+                    E::EF::one(),
+                    &limb_pair,
+                )),
+                4 => eval.add_to_relation(RelationEntry::new(
+                    &self.range_check_9_9_e_lookup_elements,
+                    E::EF::one(),
+                    &limb_pair,
+                )),
+                5 => eval.add_to_relation(RelationEntry::new(
+                    &self.range_check_9_9_f_lookup_elements,
+                    E::EF::one(),
+                    &limb_pair,
+                )),
+                6 => eval.add_to_relation(RelationEntry::new(
+                    &self.range_check_9_9_g_lookup_elements,
+                    E::EF::one(),
+                    &limb_pair,
+                )),
+                7 => eval.add_to_relation(RelationEntry::new(
+                    &self.range_check_9_9_h_lookup_elements,
+                    E::EF::one(),
+                    &limb_pair,
+                )),
+                _ => {
+                    unreachable!("There are only 8 possible values for i % 8.",)
+                }
+            };
         }
 
         // Yield the value.
-        let id = seq + E::F::from(M31::from(LARGE_MEMORY_VALUE_ID_BASE));
+        let id = seq
+            + E::F::from(M31::from(LARGE_MEMORY_VALUE_ID_BASE))
+            + E::F::from(M31::from(self.offset));
         eval.add_to_relation(RelationEntry::new(
             &self.lookup_elements,
             E::EF::from(-multiplicity),
@@ -89,21 +210,72 @@ impl FrameworkEval for BigEval {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+pub fn big_components_from_claim(
+    log_sizes: &[u32],
+    claimed_sums: &[SecureField],
+    lookup_elements: &relations::MemoryIdToBig,
+    range_check_9_9_lookup_elements: &relations::RangeCheck_9_9,
+    range_check_9_9_b_lookup_elements: &relations::RangeCheck_9_9_B,
+    range_check_9_9_c_lookup_elements: &relations::RangeCheck_9_9_C,
+    range_check_9_9_d_lookup_elements: &relations::RangeCheck_9_9_D,
+    range_check_9_9_e_lookup_elements: &relations::RangeCheck_9_9_E,
+    range_check_9_9_f_lookup_elements: &relations::RangeCheck_9_9_F,
+    range_check_9_9_g_lookup_elements: &relations::RangeCheck_9_9_G,
+    range_check_9_9_h_lookup_elements: &relations::RangeCheck_9_9_H,
+    tree_span_provider: &mut TraceLocationAllocator,
+) -> Vec<BigComponent> {
+    // Every component is responsible for a range of memory ids. The ids must not overlap. Use an
+    // offset to keep track of the previous component's range.
+    let mut components = vec![];
+    let mut offset = 0;
+    for (&log_size, &claimed_sum) in log_sizes.iter().zip_eq(claimed_sums) {
+        components.push(BigComponent::new(
+            tree_span_provider,
+            BigEval::new(
+                log_size,
+                offset,
+                lookup_elements.clone(),
+                range_check_9_9_lookup_elements.clone(),
+                range_check_9_9_b_lookup_elements.clone(),
+                range_check_9_9_c_lookup_elements.clone(),
+                range_check_9_9_d_lookup_elements.clone(),
+                range_check_9_9_e_lookup_elements.clone(),
+                range_check_9_9_f_lookup_elements.clone(),
+                range_check_9_9_g_lookup_elements.clone(),
+                range_check_9_9_h_lookup_elements.clone(),
+            ),
+            claimed_sum,
+        ));
+        offset += 1 << log_size;
+    }
+    components
+}
+
 pub struct SmallEval {
     pub log_n_rows: u32,
     pub lookup_elements: relations::MemoryIdToBig,
     pub range_check_9_9_relation: relations::RangeCheck_9_9,
+    pub range_check_9_9_b_relation: relations::RangeCheck_9_9_B,
+    pub range_check_9_9_c_relation: relations::RangeCheck_9_9_C,
+    pub range_check_9_9_d_relation: relations::RangeCheck_9_9_D,
 }
 impl SmallEval {
     pub fn new(
         claim: Claim,
         lookup_elements: relations::MemoryIdToBig,
         range_check_9_9_relation: relations::RangeCheck_9_9,
+        range_check_9_9_b_relation: relations::RangeCheck_9_9_B,
+        range_check_9_9_c_relation: relations::RangeCheck_9_9_C,
+        range_check_9_9_d_relation: relations::RangeCheck_9_9_D,
     ) -> Self {
         Self {
             log_n_rows: claim.small_log_size,
             lookup_elements,
             range_check_9_9_relation,
+            range_check_9_9_b_relation,
+            range_check_9_9_c_relation,
+            range_check_9_9_d_relation,
         }
     }
 }
@@ -122,12 +294,33 @@ impl FrameworkEval for SmallEval {
         let multiplicity = eval.next_trace_mask();
 
         // Range check limbs.
-        for (l, r) in value.iter().tuples() {
-            eval.add_to_relation(RelationEntry::new(
-                &self.range_check_9_9_relation,
-                E::EF::one(),
-                &[l.clone(), r.clone()],
-            ));
+        for (i, (l, r)) in value.iter().tuples().enumerate() {
+            let limb_pair = [l.clone(), r.clone()];
+            match i % 4 {
+                0 => eval.add_to_relation(RelationEntry::new(
+                    &self.range_check_9_9_relation,
+                    E::EF::one(),
+                    &limb_pair,
+                )),
+                1 => eval.add_to_relation(RelationEntry::new(
+                    &self.range_check_9_9_b_relation,
+                    E::EF::one(),
+                    &limb_pair,
+                )),
+                2 => eval.add_to_relation(RelationEntry::new(
+                    &self.range_check_9_9_c_relation,
+                    E::EF::one(),
+                    &limb_pair,
+                )),
+                3 => eval.add_to_relation(RelationEntry::new(
+                    &self.range_check_9_9_d_relation,
+                    E::EF::one(),
+                    &limb_pair,
+                )),
+                _ => {
+                    unreachable!("There are only 4 possible values for i % 4.",)
+                }
+            };
         }
 
         // Yield the value.
@@ -137,71 +330,65 @@ impl FrameworkEval for SmallEval {
             &chain!([id], value).collect_vec(),
         ));
 
-        // Claimed sum of `InteractionClaim` (small_claimed_sum field) is a commitment to what was
-        // used as a memory in this shard. Its value is verified by the aggregator stage.
-
-        eval.finalize_logup();
+        eval.finalize_logup_in_pairs();
         eval
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct Claim {
-    pub big_log_size: u32,
+    pub big_log_sizes: Vec<u32>,
     pub small_log_size: u32,
 }
 impl Claim {
     pub fn log_sizes(&self) -> TreeVec<Vec<u32>> {
-        let trace_log_sizes = chain!(
-            vec![self.big_log_size; BIG_N_COLUMNS],
-            vec![self.small_log_size; SMALL_N_COLUMNS]
-        )
-        .collect();
-        let interaction_log_sizes = chain!(
+        // Original trace.
+        let big_trace_log_sizes = self
+            .big_log_sizes
+            .iter()
+            .flat_map(|&log_size| vec![log_size; BIG_N_COLUMNS]);
+        let small_trace_log_sizes = vec![self.small_log_size; SMALL_N_COLUMNS];
+        let trace_log_sizes = chain!(big_trace_log_sizes, small_trace_log_sizes).collect_vec();
+
+        // Interaction trace.
+        let big_interaction_log_sizes = self.big_log_sizes.iter().flat_map(|&log_size| {
             // A range-check for every pair of limbs, batched in pairs.
             // And a yield of the value.
             vec![
-                self.big_log_size;
+                log_size;
                 SECURE_EXTENSION_DEGREE * ((N_M31_IN_FELT252.div_ceil(2) + 1).div_ceil(2))
-            ],
-            // Not batched range-check.
-            // TODO(Ohad): Batch.
+            ]
+        });
+        let small_interaction_log_sizes =
             vec![
                 self.small_log_size;
-                SECURE_EXTENSION_DEGREE * (N_M31_IN_SMALL_FELT252.div_ceil(2) + 1)
-            ]
-        )
-        .collect();
+                SECURE_EXTENSION_DEGREE * (N_M31_IN_SMALL_FELT252.div_ceil(2) + 1).div_ceil(2)
+            ];
+        let interaction_log_sizes =
+            chain!(big_interaction_log_sizes, small_interaction_log_sizes).collect_vec();
 
         TreeVec::new(vec![vec![], trace_log_sizes, interaction_log_sizes])
     }
 
     pub fn mix_into(&self, channel: &mut impl Channel) {
-        channel.mix_u64(self.big_log_size as u64);
-        channel.mix_u64(self.small_log_size as u64);
+        chain!(self.big_log_sizes.clone(), [self.small_log_size])
+            .for_each(|log_size| channel.mix_u64(log_size as u64));
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct InteractionClaim {
-    pub big_claimed_sum: SecureField,
+    pub big_claimed_sums: Vec<SecureField>,
     pub small_claimed_sum: SecureField,
 }
 impl InteractionClaim {
     pub fn mix_into(&self, channel: &mut impl Channel) {
-        channel.mix_felts(&[self.big_claimed_sum]);
+        channel.mix_felts(&self.big_claimed_sums);
         channel.mix_felts(&[self.small_claimed_sum]);
     }
-}
 
-impl CairoSerialize for InteractionClaim {
-    fn serialize(&self, output: &mut Vec<FieldElement>) {
-        let Self {
-            big_claimed_sum,
-            small_claimed_sum,
-        } = self;
-        CairoSerialize::serialize(big_claimed_sum, output);
-        CairoSerialize::serialize(small_claimed_sum, output);
+    pub fn claimed_sum(&self) -> SecureField {
+        self.small_claimed_sum + self.big_claimed_sums.iter().sum::<SecureField>()
     }
 }
 
@@ -210,8 +397,8 @@ mod tests {
     use num_traits::Zero;
     use rand::rngs::SmallRng;
     use rand::{Rng, SeedableRng};
-    use stwo_prover::constraint_framework::expr::ExprEvaluator;
-    use stwo_prover::core::fields::qm31::QM31;
+    use stwo::core::fields::qm31::QM31;
+    use stwo_constraint_framework::expr::ExprEvaluator;
 
     use super::*;
     use crate::components::constraints_regression_test_values::{
@@ -223,13 +410,24 @@ mod tests {
         let mut rng = SmallRng::seed_from_u64(0);
         let big_eval = BigEval {
             log_n_rows: 4,
+            offset: 0,
             lookup_elements: relations::MemoryIdToBig::dummy(),
-            range9_9_lookup_elements: relations::RangeCheck_9_9::dummy(),
+            range_check_9_9_lookup_elements: relations::RangeCheck_9_9::dummy(),
+            range_check_9_9_b_lookup_elements: relations::RangeCheck_9_9_B::dummy(),
+            range_check_9_9_c_lookup_elements: relations::RangeCheck_9_9_C::dummy(),
+            range_check_9_9_d_lookup_elements: relations::RangeCheck_9_9_D::dummy(),
+            range_check_9_9_e_lookup_elements: relations::RangeCheck_9_9_E::dummy(),
+            range_check_9_9_f_lookup_elements: relations::RangeCheck_9_9_F::dummy(),
+            range_check_9_9_g_lookup_elements: relations::RangeCheck_9_9_G::dummy(),
+            range_check_9_9_h_lookup_elements: relations::RangeCheck_9_9_H::dummy(),
         };
         let small_eval = SmallEval {
             log_n_rows: 4,
             lookup_elements: relations::MemoryIdToBig::dummy(),
             range_check_9_9_relation: relations::RangeCheck_9_9::dummy(),
+            range_check_9_9_b_relation: relations::RangeCheck_9_9_B::dummy(),
+            range_check_9_9_c_relation: relations::RangeCheck_9_9_C::dummy(),
+            range_check_9_9_d_relation: relations::RangeCheck_9_9_D::dummy(),
         };
 
         let big_expr_eval = big_eval.evaluate(ExprEvaluator::new());

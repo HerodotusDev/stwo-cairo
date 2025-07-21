@@ -1,20 +1,22 @@
 use itertools::{chain, Itertools};
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
+use stwo::core::air::Component;
+use stwo::core::channel::Channel;
+use stwo::core::fields::m31::M31;
+use stwo::core::fields::qm31::{SecureField, QM31};
+use stwo::core::fields::FieldExpOps;
+use stwo::core::pcs::TreeVec;
+use stwo::core::proof::StarkProof;
+use stwo::core::vcs::MerkleHasher;
+use stwo::prover::backend::simd::SimdBackend;
+use stwo::prover::ComponentProver;
+use stwo_cairo_adapter::HashMap;
 use stwo_cairo_common::prover_types::cpu::CasmState;
 use stwo_cairo_common::prover_types::felt::split_f252;
-use stwo_cairo_serialize::CairoSerialize;
-use stwo_prover::constraint_framework::preprocessed_columns::PreProcessedColumnId;
-use stwo_prover::constraint_framework::{Relation, TraceLocationAllocator};
-use stwo_prover::core::air::{Component, ComponentProver};
-use stwo_prover::core::backend::simd::SimdBackend;
-use stwo_prover::core::channel::Channel;
-use stwo_prover::core::fields::m31::M31;
-use stwo_prover::core::fields::qm31::{SecureField, QM31};
-use stwo_prover::core::fields::FieldExpOps;
-use stwo_prover::core::pcs::TreeVec;
-use stwo_prover::core::prover::StarkProof;
-use stwo_prover::core::vcs::ops::MerkleHasher;
+use stwo_cairo_serialize::{CairoDeserialize, CairoSerialize};
+use stwo_constraint_framework::preprocessed_columns::PreProcessedColumnId;
+use stwo_constraint_framework::{Relation, TraceLocationAllocator};
 
 use super::blake::air::{BlakeContextClaim, BlakeContextComponents, BlakeContextInteractionClaim};
 use super::builtins_air::{BuiltinComponents, BuiltinsClaim, BuiltinsInteractionClaim};
@@ -35,6 +37,7 @@ use crate::components::{
     verify_bitwise_xor_8, verify_bitwise_xor_9, verify_instruction,
 };
 use crate::relations;
+use crate::verifier::RelationUse;
 
 #[derive(Serialize, Deserialize)]
 pub struct CairoProof<H: MerkleHasher> {
@@ -62,7 +65,42 @@ where
     }
 }
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+impl<H: MerkleHasher> CairoDeserialize for CairoProof<H>
+where
+    H::Hash: CairoDeserialize,
+{
+    fn deserialize<'a>(data: &mut impl Iterator<Item = &'a starknet_ff::FieldElement>) -> Self {
+        let claim = CairoDeserialize::deserialize(data);
+        let interaction_pow = CairoDeserialize::deserialize(data);
+        let interaction_claim = CairoDeserialize::deserialize(data);
+        let stark_proof = CairoDeserialize::deserialize(data);
+
+        Self {
+            claim,
+            interaction_pow,
+            interaction_claim,
+            stark_proof,
+        }
+    }
+}
+
+pub type RelationUsesDict = HashMap<&'static str, u64>;
+
+/// Accumulates the number of uses of each relation in a map.
+pub fn accumulate_relation_uses<const N: usize>(
+    relation_uses: &mut RelationUsesDict,
+    relation_uses_per_row: [RelationUse; N],
+    log_size: u32,
+) {
+    let component_size = 1 << log_size;
+    for relation_use in relation_uses_per_row {
+        let relation_uses_in_component = relation_use.uses.checked_mul(component_size).unwrap();
+        let prev = relation_uses.entry(relation_use.relation_id).or_insert(0);
+        *prev = prev.checked_add(relation_uses_in_component).unwrap();
+    }
+}
+
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct CairoClaim {
     pub public_data: PublicData,
     pub opcodes: OpcodeClaim,
@@ -83,20 +121,36 @@ pub struct CairoClaim {
 
 impl CairoClaim {
     pub fn mix_into(&self, channel: &mut impl Channel) {
-        // TODO(spapini): Add common values.
-        self.opcodes.mix_into(channel);
-        self.verify_instruction.mix_into(channel);
-        self.blake_context.mix_into(channel);
-        self.builtins.mix_into(channel);
-        self.pedersen_context.mix_into(channel);
-        self.poseidon_context.mix_into(channel);
-        self.memory_address_to_id.mix_into(channel);
-        self.memory_id_to_value.mix_into(channel);
-        self.range_checks.mix_into(channel);
-        self.verify_bitwise_xor_4.mix_into(channel);
-        self.verify_bitwise_xor_7.mix_into(channel);
-        self.verify_bitwise_xor_8.mix_into(channel);
-        self.verify_bitwise_xor_9.mix_into(channel);
+        let Self {
+            public_data,
+            opcodes,
+            verify_instruction,
+            blake_context,
+            builtins,
+            pedersen_context,
+            poseidon_context,
+            memory_address_to_id,
+            memory_id_to_value,
+            range_checks,
+            verify_bitwise_xor_4,
+            verify_bitwise_xor_7,
+            verify_bitwise_xor_8,
+            verify_bitwise_xor_9,
+        } = self;
+        public_data.mix_into(channel);
+        opcodes.mix_into(channel);
+        verify_instruction.mix_into(channel);
+        blake_context.mix_into(channel);
+        builtins.mix_into(channel);
+        pedersen_context.mix_into(channel);
+        poseidon_context.mix_into(channel);
+        memory_address_to_id.mix_into(channel);
+        memory_id_to_value.mix_into(channel);
+        range_checks.mix_into(channel);
+        verify_bitwise_xor_4.mix_into(channel);
+        verify_bitwise_xor_7.mix_into(channel);
+        verify_bitwise_xor_8.mix_into(channel);
+        verify_bitwise_xor_9.mix_into(channel);
     }
 
     /// Returns the log sizes of the components.
@@ -120,9 +174,58 @@ impl CairoClaim {
 
         TreeVec::concat_cols(log_sizes_list.into_iter())
     }
+
+    pub fn accumulate_relation_uses(&self, relation_uses: &mut RelationUsesDict) {
+        let Self {
+            public_data: _,
+            opcodes,
+            verify_instruction,
+            blake_context,
+            builtins,
+            pedersen_context,
+            poseidon_context,
+            memory_address_to_id: _,
+            memory_id_to_value,
+            range_checks: _,
+            verify_bitwise_xor_4: _,
+            verify_bitwise_xor_7: _,
+            verify_bitwise_xor_8: _,
+            verify_bitwise_xor_9: _,
+        } = self;
+        // NOTE: The following components do not USE relations:
+        // - range_checks
+        // - verify_bitwise_xor_*
+        // - memory_address_to_id
+
+        opcodes.accumulate_relation_uses(relation_uses);
+        builtins.accumulate_relation_uses(relation_uses);
+        blake_context.accumulate_relation_uses(relation_uses);
+        pedersen_context.accumulate_relation_uses(relation_uses);
+        poseidon_context.accumulate_relation_uses(relation_uses);
+        accumulate_relation_uses(
+            relation_uses,
+            verify_instruction::RELATION_USES_PER_ROW,
+            verify_instruction.log_size,
+        );
+
+        // TODO(ShaharS): Look into the file name of memory_id_to_big.
+        // memory_id_to_value has a big value component and a small value component.
+        for &log_size in &memory_id_to_value.big_log_sizes {
+            accumulate_relation_uses(
+                relation_uses,
+                memory_id_to_big::RELATION_USES_PER_ROW_BIG,
+                log_size,
+            );
+        }
+        accumulate_relation_uses(
+            relation_uses,
+            memory_id_to_big::RELATION_USES_PER_ROW_SMALL,
+            memory_id_to_value.small_log_size,
+        );
+    }
 }
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct PublicData {
     pub public_memory: PublicMemory,
     pub initial_state: CasmState,
@@ -169,13 +272,30 @@ impl PublicData {
         let inverted_values = QM31::batch_inverse(&values_to_inverse);
         inverted_values.iter().sum::<QM31>()
     }
+
+    pub fn mix_into(&self, channel: &mut impl Channel) {
+        let Self {
+            public_memory,
+            initial_state,
+            final_state,
+        } = self;
+        public_memory.mix_into(channel);
+        initial_state.mix_into(channel);
+        final_state.mix_into(channel);
+    }
 }
 
 // TODO(alonf) Change all the obscure types and structs to a meaninful struct system for the memory.
-#[derive(Clone, Debug, Serialize, Deserialize, Copy, CairoSerialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Copy, CairoSerialize, CairoDeserialize)]
 pub struct MemorySmallValue {
     pub id: u32,
     pub value: u32,
+}
+impl MemorySmallValue {
+    pub fn mix_into(&self, channel: &mut impl Channel) {
+        channel.mix_u64(self.id as u64);
+        channel.mix_u64(self.value as u64);
+    }
 }
 
 // TODO(alonf): Change this into a struct. Remove Pub prefix.
@@ -186,7 +306,7 @@ pub type PubMemoryValue = (u32, [u32; 8]);
 // (address, id, value)
 pub type PubMemoryEntry = (u32, u32, [u32; 8]);
 
-#[derive(Clone, Debug, Serialize, Deserialize, Copy, CairoSerialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Copy, CairoSerialize, CairoDeserialize)]
 pub struct SegmentRange {
     pub start_ptr: MemorySmallValue,
     pub stop_ptr: MemorySmallValue,
@@ -196,21 +316,26 @@ impl SegmentRange {
     pub fn is_empty(&self) -> bool {
         self.start_ptr.value == self.stop_ptr.value
     }
+
+    pub fn mix_into(&self, channel: &mut impl Channel) {
+        self.start_ptr.mix_into(channel);
+        self.stop_ptr.mix_into(channel);
+    }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Copy, CairoSerialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Copy, CairoSerialize, CairoDeserialize)]
 pub struct PublicSegmentRanges {
     pub output: SegmentRange,
-    pub pedersen: SegmentRange,
-    pub range_check_128: SegmentRange,
-    pub ecdsa: SegmentRange,
-    pub bitwise: SegmentRange,
-    pub ec_op: SegmentRange,
-    pub keccak: SegmentRange,
-    pub poseidon: SegmentRange,
-    pub range_check_96: SegmentRange,
-    pub add_mod: SegmentRange,
-    pub mul_mod: SegmentRange,
+    pub pedersen: Option<SegmentRange>,
+    pub range_check_128: Option<SegmentRange>,
+    pub ecdsa: Option<SegmentRange>,
+    pub bitwise: Option<SegmentRange>,
+    pub ec_op: Option<SegmentRange>,
+    pub keccak: Option<SegmentRange>,
+    pub poseidon: Option<SegmentRange>,
+    pub range_check_96: Option<SegmentRange>,
+    pub add_mod: Option<SegmentRange>,
+    pub mul_mod: Option<SegmentRange>,
 }
 
 impl PublicSegmentRanges {
@@ -219,37 +344,9 @@ impl PublicSegmentRanges {
         initial_ap: u32,
         final_ap: u32,
     ) -> impl Iterator<Item = PubMemoryEntry> {
-        let PublicSegmentRanges {
-            output,
-            pedersen,
-            range_check_128,
-            ecdsa,
-            bitwise,
-            ec_op,
-            keccak,
-            poseidon,
-            range_check_96,
-            add_mod,
-            mul_mod,
-        } = *self;
-        let segments = [
-            output,
-            pedersen,
-            range_check_128,
-            ecdsa,
-            bitwise,
-            ec_op,
-            keccak,
-            poseidon,
-            range_check_96,
-            add_mod,
-            mul_mod,
-        ]
-        .into_iter()
-        .collect_vec();
+        let segments = self.present_segments();
 
         let n_segments = segments.len() as u32;
-        assert_eq!(n_segments, 11);
 
         segments
             .into_iter()
@@ -272,12 +369,49 @@ impl PublicSegmentRanges {
             )
             .map(|(addr, id, value)| (addr, id, [value, 0, 0, 0, 0, 0, 0, 0]))
     }
+
+    pub fn mix_into(&self, channel: &mut impl Channel) {
+        for segment in self.present_segments() {
+            segment.mix_into(channel);
+        }
+    }
+
+    pub fn present_segments(&self) -> Vec<SegmentRange> {
+        let Self {
+            output,
+            pedersen,
+            range_check_128,
+            ecdsa,
+            bitwise,
+            ec_op,
+            keccak,
+            poseidon,
+            range_check_96,
+            add_mod,
+            mul_mod,
+        } = *self;
+        vec![
+            Some(output),
+            pedersen,
+            range_check_128,
+            ecdsa,
+            bitwise,
+            ec_op,
+            keccak,
+            poseidon,
+            range_check_96,
+            add_mod,
+            mul_mod,
+        ]
+        .into_iter()
+        .flatten()
+        .collect_vec()
+    }
 }
 
 pub type MemorySection = Vec<PubMemoryValue>;
 
-// TODO(alonf): Perform all public data validations.
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct PublicMemory {
     pub program: MemorySection,
     pub public_segments: PublicSegmentRanges,
@@ -305,6 +439,33 @@ impl PublicMemory {
             .chain(safe_call_iter)
             .chain(segment_ranges_iter)
             .chain(output_iter)
+    }
+
+    pub fn mix_into(&self, channel: &mut impl Channel) {
+        let Self {
+            program,
+            public_segments,
+            output,
+            safe_call,
+        } = self;
+
+        // Program is the bootloader and doesn't need to be mixed into the channel.
+        let _ = program;
+
+        // Mix public segments.
+        public_segments.mix_into(channel);
+
+        // Mix output memory section.
+        channel.mix_u32s(&output.iter().flat_map(|(_, felt)| *felt).collect_vec());
+
+        // Mix safe_call memory section.
+        channel.mix_u64(safe_call.len() as u64);
+        for (id, value) in safe_call {
+            channel.mix_u64(*id as u64);
+            for limb in value.iter() {
+                channel.mix_u64(*limb as u64);
+            }
+        }
     }
 }
 
@@ -359,7 +520,7 @@ impl CairoInteractionElements {
     }
 }
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct CairoInteractionClaim {
     pub opcodes: OpcodeInteractionClaim,
     pub verify_instruction: verify_instruction::InteractionClaim,
@@ -410,8 +571,7 @@ pub fn lookup_sum(
     sum += interaction_claim.pedersen_context.sum();
     sum += interaction_claim.poseidon_context.sum();
     sum += interaction_claim.memory_address_to_id.claimed_sum;
-    sum += interaction_claim.memory_id_to_value.big_claimed_sum;
-    sum += interaction_claim.memory_id_to_value.small_claimed_sum;
+    sum += interaction_claim.memory_id_to_value.claimed_sum();
     sum += interaction_claim.range_checks.sum();
     sum += interaction_claim.verify_bitwise_xor_4.claimed_sum;
     sum += interaction_claim.verify_bitwise_xor_7.claimed_sum;
@@ -430,7 +590,7 @@ pub struct CairoComponents {
     pub poseidon_context: PoseidonContextComponents,
     pub memory_address_to_id: memory_address_to_id::Component,
     pub memory_id_to_value: (
-        memory_id_to_big::BigComponent,
+        Vec<memory_id_to_big::BigComponent>,
         memory_id_to_big::SmallComponent,
     ),
     pub range_checks: RangeChecksComponents,
@@ -509,14 +669,19 @@ impl CairoComponents {
             interaction_claim.memory_address_to_id.clone().claimed_sum,
         );
 
-        let memory_id_to_value_component = memory_id_to_big::BigComponent::new(
+        let memory_id_to_value_components = memory_id_to_big::big_components_from_claim(
+            &cairo_claim.memory_id_to_value.big_log_sizes,
+            &interaction_claim.memory_id_to_value.big_claimed_sums,
+            &interaction_elements.memory_id_to_value,
+            &interaction_elements.range_checks.rc_9_9,
+            &interaction_elements.range_checks.rc_9_9_b,
+            &interaction_elements.range_checks.rc_9_9_c,
+            &interaction_elements.range_checks.rc_9_9_d,
+            &interaction_elements.range_checks.rc_9_9_e,
+            &interaction_elements.range_checks.rc_9_9_f,
+            &interaction_elements.range_checks.rc_9_9_g,
+            &interaction_elements.range_checks.rc_9_9_h,
             tree_span_provider,
-            memory_id_to_big::BigEval::new(
-                cairo_claim.memory_id_to_value.clone(),
-                interaction_elements.memory_id_to_value.clone(),
-                interaction_elements.range_checks.rc_9_9.clone(),
-            ),
-            interaction_claim.memory_id_to_value.clone().big_claimed_sum,
         );
         let small_memory_id_to_value_component = memory_id_to_big::SmallComponent::new(
             tree_span_provider,
@@ -524,6 +689,9 @@ impl CairoComponents {
                 cairo_claim.memory_id_to_value.clone(),
                 interaction_elements.memory_id_to_value.clone(),
                 interaction_elements.range_checks.rc_9_9.clone(),
+                interaction_elements.range_checks.rc_9_9_b.clone(),
+                interaction_elements.range_checks.rc_9_9_c.clone(),
+                interaction_elements.range_checks.rc_9_9_d.clone(),
             ),
             interaction_claim
                 .memory_id_to_value
@@ -584,7 +752,7 @@ impl CairoComponents {
             poseidon_context,
             memory_address_to_id: memory_address_to_id_component,
             memory_id_to_value: (
-                memory_id_to_value_component,
+                memory_id_to_value_components,
                 small_memory_id_to_value_component,
             ),
             range_checks: range_checks_component,
@@ -603,11 +771,12 @@ impl CairoComponents {
             self.builtins.provers(),
             self.pedersen_context.provers(),
             self.poseidon_context.provers(),
-            [
-                &self.memory_address_to_id as &dyn ComponentProver<SimdBackend>,
-                &self.memory_id_to_value.0 as &dyn ComponentProver<SimdBackend>,
-                &self.memory_id_to_value.1 as &dyn ComponentProver<SimdBackend>,
-            ],
+            [&self.memory_address_to_id as &dyn ComponentProver<SimdBackend>,],
+            self.memory_id_to_value
+                .0
+                .iter()
+                .map(|component| component as &dyn ComponentProver<SimdBackend>),
+            [&self.memory_id_to_value.1 as &dyn ComponentProver<SimdBackend>,],
             self.range_checks.provers(),
             [
                 &self.verify_bitwise_xor_4 as &dyn ComponentProver<SimdBackend>,
@@ -645,11 +814,13 @@ impl std::fmt::Display for CairoComponents {
             "MemoryAddressToId: {}",
             indented_component_display(&self.memory_address_to_id)
         )?;
-        writeln!(
-            f,
-            "MemoryIdToValue: {}",
-            indented_component_display(&self.memory_id_to_value.0)
-        )?;
+        for component in &self.memory_id_to_value.0 {
+            writeln!(
+                f,
+                "MemoryIdToValue: {}",
+                indented_component_display(component)
+            )?;
+        }
         writeln!(
             f,
             "SmallMemoryIdToValue: {}",
@@ -677,5 +848,35 @@ impl std::fmt::Display for CairoComponents {
             indented_component_display(&self.verify_bitwise_xor_9)
         )?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use stwo_cairo_adapter::HashMap;
+
+    use crate::air::accumulate_relation_uses;
+    use crate::verifier::RelationUse;
+
+    #[test]
+    fn test_accumulate_relation_uses() {
+        let mut relation_uses = HashMap::from([("relation_1", 4), ("relation_2", 10)]);
+        let log_size = 2;
+        let relation_uses_per_row = [
+            RelationUse {
+                relation_id: "relation_1",
+                uses: 2,
+            },
+            RelationUse {
+                relation_id: "relation_2",
+                uses: 4,
+            },
+        ];
+
+        accumulate_relation_uses(&mut relation_uses, relation_uses_per_row, log_size);
+
+        assert_eq!(relation_uses.len(), 2);
+        assert_eq!(relation_uses.get("relation_1"), Some(&12));
+        assert_eq!(relation_uses.get("relation_2"), Some(&26));
     }
 }

@@ -1,21 +1,22 @@
 use itertools::chain;
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
-use stwo_cairo_serialize::CairoSerialize;
-use stwo_prover::constraint_framework::TraceLocationAllocator;
-use stwo_prover::core::air::ComponentProver;
-use stwo_prover::core::backend::simd::SimdBackend;
-use stwo_prover::core::channel::Channel;
-use stwo_prover::core::fields::qm31::{SecureField, QM31};
-use stwo_prover::core::pcs::TreeVec;
+use stwo::core::channel::Channel;
+use stwo::core::fields::qm31::{SecureField, QM31};
+use stwo::core::pcs::TreeVec;
+use stwo::prover::backend::simd::SimdBackend;
+use stwo::prover::ComponentProver;
+use stwo_cairo_serialize::{CairoDeserialize, CairoSerialize};
+use stwo_constraint_framework::TraceLocationAllocator;
 
 use super::air::CairoInteractionElements;
+use crate::air::{accumulate_relation_uses, RelationUsesDict};
 use crate::components::{
     add_mod_builtin, bitwise_builtin, indented_component_display, mul_mod_builtin,
     pedersen_builtin, poseidon_builtin, range_check_builtin_bits_128, range_check_builtin_bits_96,
 };
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct BuiltinsClaim {
     pub add_mod_builtin: Option<add_mod_builtin::Claim>,
     pub bitwise_builtin: Option<bitwise_builtin::Claim>,
@@ -75,9 +76,40 @@ impl BuiltinsClaim {
                 .into_iter(),
         ))
     }
+    pub fn accumulate_relation_uses(&self, relation_uses: &mut RelationUsesDict) {
+        let Self {
+            add_mod_builtin,
+            bitwise_builtin,
+            mul_mod_builtin,
+            pedersen_builtin,
+            poseidon_builtin,
+            range_check_96_builtin,
+            range_check_128_builtin,
+        } = self;
+
+        // TODO(alonf): canonicalize the name of field and module.
+        macro_rules! relation_uses {
+            ($field:ident, $module:ident) => {
+                if let Some(field) = $field {
+                    accumulate_relation_uses(
+                        relation_uses,
+                        $module::RELATION_USES_PER_ROW,
+                        field.log_size,
+                    );
+                };
+            };
+        }
+        relation_uses!(add_mod_builtin, add_mod_builtin);
+        relation_uses!(bitwise_builtin, bitwise_builtin);
+        relation_uses!(mul_mod_builtin, mul_mod_builtin);
+        relation_uses!(pedersen_builtin, pedersen_builtin);
+        relation_uses!(poseidon_builtin, poseidon_builtin);
+        relation_uses!(range_check_96_builtin, range_check_builtin_bits_96);
+        relation_uses!(range_check_128_builtin, range_check_builtin_bits_128);
+    }
 }
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct BuiltinsInteractionClaim {
     pub add_mod_builtin: Option<add_mod_builtin::InteractionClaim>,
     pub bitwise_builtin: Option<bitwise_builtin::InteractionClaim>,
@@ -182,6 +214,9 @@ impl BuiltinComponents {
                         .clone(),
                     verify_bitwise_xor_9_lookup_elements: interaction_elements
                         .verify_bitwise_xor_9
+                        .clone(),
+                    verify_bitwise_xor_8_lookup_elements: interaction_elements
+                        .verify_bitwise_xor_8
                         .clone(),
                 },
                 interaction_claim.bitwise_builtin.unwrap().claimed_sum,

@@ -6,6 +6,28 @@ use crate::components::subroutines::xor_rot_32_r_7::XorRot32R7;
 use crate::components::subroutines::xor_rot_32_r_8::XorRot32R8;
 
 pub const N_TRACE_COLUMNS: usize = 53;
+pub const RELATION_USES_PER_ROW: [RelationUse; 5] = [
+    RelationUse {
+        relation_id: "VerifyBitwiseXor_12",
+        uses: 2,
+    },
+    RelationUse {
+        relation_id: "VerifyBitwiseXor_4",
+        uses: 2,
+    },
+    RelationUse {
+        relation_id: "VerifyBitwiseXor_7",
+        uses: 2,
+    },
+    RelationUse {
+        relation_id: "VerifyBitwiseXor_8",
+        uses: 8,
+    },
+    RelationUse {
+        relation_id: "VerifyBitwiseXor_9",
+        uses: 2,
+    },
+];
 
 pub struct Eval {
     pub claim: Claim,
@@ -17,7 +39,7 @@ pub struct Eval {
     pub blake_g_lookup_elements: relations::BlakeG,
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct Claim {
     pub log_size: u32,
 }
@@ -33,7 +55,7 @@ impl Claim {
     }
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct InteractionClaim {
     pub claimed_sum: SecureField,
 }
@@ -115,22 +137,19 @@ impl FrameworkEval for Eval {
 
         eval.add_constraint(enabler.clone() * enabler.clone() - enabler.clone());
 
-        #[allow(clippy::unused_unit)]
-        #[allow(unused_variables)]
-        let [triple_sum_32_output_tmp_f72c8_3_limb_0, triple_sum_32_output_tmp_f72c8_3_limb_1] =
-            TripleSum32::evaluate(
-                [
-                    input_limb_0_col0.clone(),
-                    input_limb_1_col1.clone(),
-                    input_limb_2_col2.clone(),
-                    input_limb_3_col3.clone(),
-                    input_limb_8_col8.clone(),
-                    input_limb_9_col9.clone(),
-                ],
-                triple_sum32_res_limb_0_col12.clone(),
-                triple_sum32_res_limb_1_col13.clone(),
-                &mut eval,
-            );
+        TripleSum32::evaluate(
+            [
+                input_limb_0_col0.clone(),
+                input_limb_1_col1.clone(),
+                input_limb_2_col2.clone(),
+                input_limb_3_col3.clone(),
+                input_limb_8_col8.clone(),
+                input_limb_9_col9.clone(),
+            ],
+            triple_sum32_res_limb_0_col12.clone(),
+            triple_sum32_res_limb_1_col13.clone(),
+            &mut eval,
+        );
         #[allow(clippy::unused_unit)]
         #[allow(unused_variables)]
         let [xor_rot_32_r_16_output_tmp_f72c8_21_limb_0, xor_rot_32_r_16_output_tmp_f72c8_21_limb_1] =
@@ -149,25 +168,22 @@ impl FrameworkEval for Eval {
                 xor_col19.clone(),
                 xor_col20.clone(),
                 xor_col21.clone(),
-                &mut eval,
                 &self.verify_bitwise_xor_8_lookup_elements,
-            );
-        #[allow(clippy::unused_unit)]
-        #[allow(unused_variables)]
-        let [triple_sum_32_output_tmp_f72c8_25_limb_0, triple_sum_32_output_tmp_f72c8_25_limb_1] =
-            TripleSum32::evaluate(
-                [
-                    input_limb_4_col4.clone(),
-                    input_limb_5_col5.clone(),
-                    xor_rot_32_r_16_output_tmp_f72c8_21_limb_0.clone(),
-                    xor_rot_32_r_16_output_tmp_f72c8_21_limb_1.clone(),
-                    M31_0.clone(),
-                    M31_0.clone(),
-                ],
-                triple_sum32_res_limb_0_col22.clone(),
-                triple_sum32_res_limb_1_col23.clone(),
                 &mut eval,
             );
+        TripleSum32::evaluate(
+            [
+                input_limb_4_col4.clone(),
+                input_limb_5_col5.clone(),
+                xor_rot_32_r_16_output_tmp_f72c8_21_limb_0.clone(),
+                xor_rot_32_r_16_output_tmp_f72c8_21_limb_1.clone(),
+                M31_0.clone(),
+                M31_0.clone(),
+            ],
+            triple_sum32_res_limb_0_col22.clone(),
+            triple_sum32_res_limb_1_col23.clone(),
+            &mut eval,
+        );
         #[allow(clippy::unused_unit)]
         #[allow(unused_variables)]
         let [xor_rot_32_r_12_output_tmp_f72c8_43_limb_0, xor_rot_32_r_12_output_tmp_f72c8_43_limb_1] =
@@ -186,26 +202,23 @@ impl FrameworkEval for Eval {
                 xor_col29.clone(),
                 xor_col30.clone(),
                 xor_col31.clone(),
-                &mut eval,
                 &self.verify_bitwise_xor_12_lookup_elements,
                 &self.verify_bitwise_xor_4_lookup_elements,
-            );
-        #[allow(clippy::unused_unit)]
-        #[allow(unused_variables)]
-        let [triple_sum_32_output_tmp_f72c8_47_limb_0, triple_sum_32_output_tmp_f72c8_47_limb_1] =
-            TripleSum32::evaluate(
-                [
-                    triple_sum32_res_limb_0_col12.clone(),
-                    triple_sum32_res_limb_1_col13.clone(),
-                    xor_rot_32_r_12_output_tmp_f72c8_43_limb_0.clone(),
-                    xor_rot_32_r_12_output_tmp_f72c8_43_limb_1.clone(),
-                    input_limb_10_col10.clone(),
-                    input_limb_11_col11.clone(),
-                ],
-                triple_sum32_res_limb_0_col32.clone(),
-                triple_sum32_res_limb_1_col33.clone(),
                 &mut eval,
             );
+        TripleSum32::evaluate(
+            [
+                triple_sum32_res_limb_0_col12.clone(),
+                triple_sum32_res_limb_1_col13.clone(),
+                xor_rot_32_r_12_output_tmp_f72c8_43_limb_0.clone(),
+                xor_rot_32_r_12_output_tmp_f72c8_43_limb_1.clone(),
+                input_limb_10_col10.clone(),
+                input_limb_11_col11.clone(),
+            ],
+            triple_sum32_res_limb_0_col32.clone(),
+            triple_sum32_res_limb_1_col33.clone(),
+            &mut eval,
+        );
         #[allow(clippy::unused_unit)]
         #[allow(unused_variables)]
         let [xor_rot_32_r_8_output_tmp_f72c8_65_limb_0, xor_rot_32_r_8_output_tmp_f72c8_65_limb_1] =
@@ -224,25 +237,22 @@ impl FrameworkEval for Eval {
                 xor_col39.clone(),
                 xor_col40.clone(),
                 xor_col41.clone(),
-                &mut eval,
                 &self.verify_bitwise_xor_8_lookup_elements,
-            );
-        #[allow(clippy::unused_unit)]
-        #[allow(unused_variables)]
-        let [triple_sum_32_output_tmp_f72c8_69_limb_0, triple_sum_32_output_tmp_f72c8_69_limb_1] =
-            TripleSum32::evaluate(
-                [
-                    triple_sum32_res_limb_0_col22.clone(),
-                    triple_sum32_res_limb_1_col23.clone(),
-                    xor_rot_32_r_8_output_tmp_f72c8_65_limb_0.clone(),
-                    xor_rot_32_r_8_output_tmp_f72c8_65_limb_1.clone(),
-                    M31_0.clone(),
-                    M31_0.clone(),
-                ],
-                triple_sum32_res_limb_0_col42.clone(),
-                triple_sum32_res_limb_1_col43.clone(),
                 &mut eval,
             );
+        TripleSum32::evaluate(
+            [
+                triple_sum32_res_limb_0_col22.clone(),
+                triple_sum32_res_limb_1_col23.clone(),
+                xor_rot_32_r_8_output_tmp_f72c8_65_limb_0.clone(),
+                xor_rot_32_r_8_output_tmp_f72c8_65_limb_1.clone(),
+                M31_0.clone(),
+                M31_0.clone(),
+            ],
+            triple_sum32_res_limb_0_col42.clone(),
+            triple_sum32_res_limb_1_col43.clone(),
+            &mut eval,
+        );
         #[allow(clippy::unused_unit)]
         #[allow(unused_variables)]
         let [xor_rot_32_r_7_output_tmp_f72c8_87_limb_0, xor_rot_32_r_7_output_tmp_f72c8_87_limb_1] =
@@ -261,9 +271,9 @@ impl FrameworkEval for Eval {
                 xor_col49.clone(),
                 xor_col50.clone(),
                 xor_col51.clone(),
-                &mut eval,
                 &self.verify_bitwise_xor_7_lookup_elements,
                 &self.verify_bitwise_xor_9_lookup_elements,
+                &mut eval,
             );
         eval.add_to_relation(RelationEntry::new(
             &self.blake_g_lookup_elements,
@@ -302,8 +312,8 @@ mod tests {
     use num_traits::Zero;
     use rand::rngs::SmallRng;
     use rand::{Rng, SeedableRng};
-    use stwo_prover::constraint_framework::expr::ExprEvaluator;
-    use stwo_prover::core::fields::qm31::QM31;
+    use stwo::core::fields::qm31::QM31;
+    use stwo_constraint_framework::expr::ExprEvaluator;
 
     use super::*;
     use crate::components::constraints_regression_test_values::BLAKE_G;

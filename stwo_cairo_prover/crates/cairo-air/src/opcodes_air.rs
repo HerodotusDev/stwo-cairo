@@ -1,25 +1,25 @@
 use itertools::{chain, Itertools};
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
-use stwo_cairo_serialize::CairoSerialize;
-use stwo_prover::constraint_framework::TraceLocationAllocator;
-use stwo_prover::core::air::ComponentProver;
-use stwo_prover::core::backend::simd::SimdBackend;
-use stwo_prover::core::channel::Channel;
-use stwo_prover::core::fields::qm31::{SecureField, QM31};
-use stwo_prover::core::pcs::TreeVec;
+use stwo::core::channel::Channel;
+use stwo::core::fields::qm31::{SecureField, QM31};
+use stwo::core::pcs::TreeVec;
+use stwo::prover::backend::simd::SimdBackend;
+use stwo::prover::ComponentProver;
+use stwo_cairo_serialize::{CairoDeserialize, CairoSerialize};
+use stwo_constraint_framework::TraceLocationAllocator;
 
 use super::air::CairoInteractionElements;
 use super::components::display_components;
+use crate::air::{accumulate_relation_uses, RelationUsesDict};
 use crate::components::{
     add_ap_opcode, add_opcode, add_opcode_small, assert_eq_opcode, assert_eq_opcode_double_deref,
-    assert_eq_opcode_imm, blake_compress_opcode, call_opcode, call_opcode_op_1_base_fp,
-    call_opcode_rel, generic_opcode, jnz_opcode, jnz_opcode_taken, jump_opcode,
-    jump_opcode_double_deref, jump_opcode_rel, jump_opcode_rel_imm, mul_opcode, mul_opcode_small,
-    qm_31_add_mul_opcode, ret_opcode,
+    assert_eq_opcode_imm, blake_compress_opcode, call_opcode, call_opcode_rel_imm, generic_opcode,
+    jnz_opcode, jnz_opcode_taken, jump_opcode, jump_opcode_double_deref, jump_opcode_rel,
+    jump_opcode_rel_imm, mul_opcode, mul_opcode_small, qm_31_add_mul_opcode, ret_opcode,
 };
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct OpcodeClaim {
     pub add: Vec<add_opcode::Claim>,
     pub add_small: Vec<add_opcode_small::Claim>,
@@ -29,8 +29,7 @@ pub struct OpcodeClaim {
     pub assert_eq_double_deref: Vec<assert_eq_opcode_double_deref::Claim>,
     pub blake: Vec<blake_compress_opcode::Claim>,
     pub call: Vec<call_opcode::Claim>,
-    pub call_op_1_base_fp: Vec<call_opcode_op_1_base_fp::Claim>,
-    pub call_rel: Vec<call_opcode_rel::Claim>,
+    pub call_rel_imm: Vec<call_opcode_rel_imm::Claim>,
     pub generic: Vec<generic_opcode::Claim>,
     pub jnz: Vec<jnz_opcode::Claim>,
     pub jnz_taken: Vec<jnz_opcode_taken::Claim>,
@@ -61,8 +60,7 @@ impl OpcodeClaim {
         mix_component_vector!(assert_eq_double_deref);
         mix_component_vector!(blake);
         mix_component_vector!(call);
-        mix_component_vector!(call_op_1_base_fp);
-        mix_component_vector!(call_rel);
+        mix_component_vector!(call_rel_imm);
         mix_component_vector!(generic);
         mix_component_vector!(jnz);
         mix_component_vector!(jnz_taken);
@@ -86,8 +84,7 @@ impl OpcodeClaim {
             self.assert_eq_double_deref.iter().map(|c| c.log_sizes()),
             self.blake.iter().map(|c| c.log_sizes()),
             self.call.iter().map(|c| c.log_sizes()),
-            self.call_op_1_base_fp.iter().map(|c| c.log_sizes()),
-            self.call_rel.iter().map(|c| c.log_sizes()),
+            self.call_rel_imm.iter().map(|c| c.log_sizes()),
             self.generic.iter().map(|c| c.log_sizes()),
             self.jnz.iter().map(|c| c.log_sizes()),
             self.jnz_taken.iter().map(|c| c.log_sizes()),
@@ -101,9 +98,67 @@ impl OpcodeClaim {
             self.ret.iter().map(|c| c.log_sizes()),
         ))
     }
+
+    pub fn accumulate_relation_uses(&self, relation_uses: &mut RelationUsesDict) {
+        let Self {
+            add,
+            add_small,
+            add_ap,
+            assert_eq,
+            assert_eq_imm,
+            assert_eq_double_deref,
+            blake,
+            call,
+            call_rel_imm,
+            generic,
+            jnz,
+            jnz_taken,
+            jump,
+            jump_double_deref,
+            jump_rel,
+            jump_rel_imm,
+            mul,
+            mul_small,
+            qm31,
+            ret,
+        } = self;
+
+        // TODO(alonf): canonicalize the name of field and module.
+        macro_rules! relation_uses {
+            ($field:ident, $module:ident) => {
+                $field.iter().for_each(|c| {
+                    accumulate_relation_uses(
+                        relation_uses,
+                        $module::RELATION_USES_PER_ROW,
+                        c.log_size,
+                    )
+                });
+            };
+        }
+        relation_uses!(add, add_opcode);
+        relation_uses!(add_small, add_opcode_small);
+        relation_uses!(add_ap, add_ap_opcode);
+        relation_uses!(assert_eq, assert_eq_opcode);
+        relation_uses!(assert_eq_imm, assert_eq_opcode_imm);
+        relation_uses!(assert_eq_double_deref, assert_eq_opcode_double_deref);
+        relation_uses!(blake, blake_compress_opcode);
+        relation_uses!(call, call_opcode);
+        relation_uses!(call_rel_imm, call_opcode_rel_imm);
+        relation_uses!(generic, generic_opcode);
+        relation_uses!(jnz, jnz_opcode);
+        relation_uses!(jnz_taken, jnz_opcode_taken);
+        relation_uses!(jump, jump_opcode);
+        relation_uses!(jump_double_deref, jump_opcode_double_deref);
+        relation_uses!(jump_rel, jump_opcode_rel);
+        relation_uses!(jump_rel_imm, jump_opcode_rel_imm);
+        relation_uses!(mul, mul_opcode);
+        relation_uses!(mul_small, mul_opcode_small);
+        relation_uses!(qm31, qm_31_add_mul_opcode);
+        relation_uses!(ret, ret_opcode);
+    }
 }
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct OpcodeInteractionClaim {
     pub add: Vec<add_opcode::InteractionClaim>,
     pub add_small: Vec<add_opcode_small::InteractionClaim>,
@@ -113,8 +168,7 @@ pub struct OpcodeInteractionClaim {
     pub assert_eq_double_deref: Vec<assert_eq_opcode_double_deref::InteractionClaim>,
     pub blake: Vec<blake_compress_opcode::InteractionClaim>,
     pub call: Vec<call_opcode::InteractionClaim>,
-    pub call_op_1_base_fp: Vec<call_opcode_op_1_base_fp::InteractionClaim>,
-    pub call_rel: Vec<call_opcode_rel::InteractionClaim>,
+    pub call_rel_imm: Vec<call_opcode_rel_imm::InteractionClaim>,
     pub generic: Vec<generic_opcode::InteractionClaim>,
     pub jnz: Vec<jnz_opcode::InteractionClaim>,
     pub jnz_taken: Vec<jnz_opcode_taken::InteractionClaim>,
@@ -139,10 +193,7 @@ impl OpcodeInteractionClaim {
             .for_each(|c| c.mix_into(channel));
         self.blake.iter().for_each(|c| c.mix_into(channel));
         self.call.iter().for_each(|c| c.mix_into(channel));
-        self.call_op_1_base_fp
-            .iter()
-            .for_each(|c| c.mix_into(channel));
-        self.call_rel.iter().for_each(|c| c.mix_into(channel));
+        self.call_rel_imm.iter().for_each(|c| c.mix_into(channel));
         self.generic.iter().for_each(|c| c.mix_into(channel));
         self.jnz.iter().for_each(|c| c.mix_into(channel));
         self.jnz_taken.iter().for_each(|c| c.mix_into(channel));
@@ -184,10 +235,7 @@ impl OpcodeInteractionClaim {
         for interaction_claim in &self.call {
             sum += interaction_claim.claimed_sum;
         }
-        for interaction_claim in &self.call_op_1_base_fp {
-            sum += interaction_claim.claimed_sum;
-        }
-        for interaction_claim in &self.call_rel {
+        for interaction_claim in &self.call_rel_imm {
             sum += interaction_claim.claimed_sum;
         }
         for interaction_claim in &self.generic {
@@ -236,8 +284,7 @@ pub struct OpcodeComponents {
     pub assert_eq_double_deref: Vec<assert_eq_opcode_double_deref::Component>,
     pub blake: Vec<blake_compress_opcode::Component>,
     pub call: Vec<call_opcode::Component>,
-    pub call_op_1_base_fp: Vec<call_opcode_op_1_base_fp::Component>,
-    pub call_rel: Vec<call_opcode_rel::Component>,
+    pub call_rel_imm: Vec<call_opcode_rel_imm::Component>,
     pub generic: Vec<generic_opcode::Component>,
     pub jnz: Vec<jnz_opcode::Component>,
     pub jnz_taken: Vec<jnz_opcode_taken::Component>,
@@ -323,6 +370,14 @@ impl OpcodeComponents {
                         opcodes_lookup_elements: interaction_elements.opcodes.clone(),
                         verify_instruction_lookup_elements: interaction_elements
                             .verify_instruction
+                            .clone(),
+                        range_check_19_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_19
+                            .clone(),
+                        range_check_8_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_8
                             .clone(),
                     },
                     interaction_claim.claimed_sum,
@@ -452,38 +507,14 @@ impl OpcodeComponents {
                 )
             })
             .collect();
-        let call_op_1_base_fp_components = claim
-            .call_op_1_base_fp
+        let call_rel_imm_components = claim
+            .call_rel_imm
             .iter()
-            .zip(interaction_claim.call_op_1_base_fp.iter())
+            .zip(interaction_claim.call_rel_imm.iter())
             .map(|(&claim, &interaction_claim)| {
-                call_opcode_op_1_base_fp::Component::new(
+                call_opcode_rel_imm::Component::new(
                     tree_span_provider,
-                    call_opcode_op_1_base_fp::Eval {
-                        claim,
-                        memory_address_to_id_lookup_elements: interaction_elements
-                            .memory_address_to_id
-                            .clone(),
-                        memory_id_to_big_lookup_elements: interaction_elements
-                            .memory_id_to_value
-                            .clone(),
-                        opcodes_lookup_elements: interaction_elements.opcodes.clone(),
-                        verify_instruction_lookup_elements: interaction_elements
-                            .verify_instruction
-                            .clone(),
-                    },
-                    interaction_claim.claimed_sum,
-                )
-            })
-            .collect();
-        let call_rel_components = claim
-            .call_rel
-            .iter()
-            .zip(interaction_claim.call_rel.iter())
-            .map(|(&claim, &interaction_claim)| {
-                call_opcode_rel::Component::new(
-                    tree_span_provider,
-                    call_opcode_rel::Eval {
+                    call_opcode_rel_imm::Eval {
                         claim,
                         memory_address_to_id_lookup_elements: interaction_elements
                             .memory_address_to_id
@@ -520,9 +551,69 @@ impl OpcodeComponents {
                             .range_checks
                             .rc_19
                             .clone(),
+                        range_check_19_b_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_19_b
+                            .clone(),
+                        range_check_19_c_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_19_c
+                            .clone(),
+                        range_check_19_d_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_19_d
+                            .clone(),
+                        range_check_19_e_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_19_e
+                            .clone(),
+                        range_check_19_f_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_19_f
+                            .clone(),
+                        range_check_19_g_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_19_g
+                            .clone(),
+                        range_check_19_h_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_19_h
+                            .clone(),
                         range_check_9_9_lookup_elements: interaction_elements
                             .range_checks
                             .rc_9_9
+                            .clone(),
+                        range_check_9_9_b_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_9_9_b
+                            .clone(),
+                        range_check_9_9_c_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_9_9_c
+                            .clone(),
+                        range_check_9_9_d_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_9_9_d
+                            .clone(),
+                        range_check_9_9_e_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_9_9_e
+                            .clone(),
+                        range_check_9_9_f_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_9_9_f
+                            .clone(),
+                        range_check_9_9_g_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_9_9_g
+                            .clone(),
+                        range_check_9_9_h_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_9_9_h
+                            .clone(),
+                        range_check_8_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_8
                             .clone(),
                         verify_instruction_lookup_elements: interaction_elements
                             .verify_instruction
@@ -696,6 +787,34 @@ impl OpcodeComponents {
                             .range_checks
                             .rc_19
                             .clone(),
+                        range_check_19_b_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_19_b
+                            .clone(),
+                        range_check_19_c_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_19_c
+                            .clone(),
+                        range_check_19_d_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_19_d
+                            .clone(),
+                        range_check_19_e_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_19_e
+                            .clone(),
+                        range_check_19_f_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_19_f
+                            .clone(),
+                        range_check_19_g_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_19_g
+                            .clone(),
+                        range_check_19_h_lookup_elements: interaction_elements
+                            .range_checks
+                            .rc_19_h
+                            .clone(),
                         verify_instruction_lookup_elements: interaction_elements
                             .verify_instruction
                             .clone(),
@@ -793,8 +912,7 @@ impl OpcodeComponents {
             assert_eq_double_deref: assert_eq_double_deref_components,
             blake: blake_components,
             call: call_components,
-            call_op_1_base_fp: call_op_1_base_fp_components,
-            call_rel: call_rel_components,
+            call_rel_imm: call_rel_imm_components,
             generic: generic_components,
             jnz: jnz_components,
             jnz_taken: jnz_taken_components,
@@ -852,12 +970,7 @@ impl OpcodeComponents {
                 .map(|component| component as &dyn ComponentProver<SimdBackend>),
         );
         vec.extend(
-            self.call_op_1_base_fp
-                .iter()
-                .map(|component| component as &dyn ComponentProver<SimdBackend>),
-        );
-        vec.extend(
-            self.call_rel
+            self.call_rel_imm
                 .iter()
                 .map(|component| component as &dyn ComponentProver<SimdBackend>),
         );
@@ -938,10 +1051,8 @@ impl std::fmt::Display for OpcodeComponents {
         writeln!(f, "{}", display_components(&self.blake))?;
         writeln!(f, "call:")?;
         writeln!(f, "{}", display_components(&self.call))?;
-        writeln!(f, "call_op_1_base_fp:")?;
-        writeln!(f, "{}", display_components(&self.call_op_1_base_fp))?;
-        writeln!(f, "call_rel:")?;
-        writeln!(f, "{}", display_components(&self.call_rel))?;
+        writeln!(f, "call_rel_imm:")?;
+        writeln!(f, "{}", display_components(&self.call_rel_imm))?;
         writeln!(f, "generic:")?;
         writeln!(f, "{}", display_components(&self.generic))?;
         writeln!(f, "jnz:")?;

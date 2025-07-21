@@ -1,18 +1,10 @@
-use stwo_cairo_air::utils::construct_f252;
-use stwo_cairo_air::{CairoProof, verify_cairo};
+use stwo_cairo_air::{CairoProof, VerificationOutput, get_verification_output, verify_cairo};
 
 #[executable]
-fn main(proof: CairoProof) -> Array<felt252> {
-    let mut output = array![];
+fn main(proof: CairoProof) -> VerificationOutput {
+    let verification_output = get_verification_output(proof: @proof);
 
-    for entry in @proof.claim.public_data.public_memory.output {
-        let (_, val) = entry;
-        output.append(construct_f252(BoxTrait::new(*val)));
-    }
+    verify_cairo(:proof);
 
-    if let Result::Err(err) = verify_cairo(proof) {
-        panic!("Verification failed: {:?}", err);
-    }
-
-    output
+    verification_output
 }

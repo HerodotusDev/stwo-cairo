@@ -2,17 +2,24 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use cairo_air::air::CairoClaim;
 use cairo_air::preprocessed::PreProcessedTrace;
+use cairo_air::PreProcessedTraceVariant;
+use itertools::Itertools;
 use num_traits::{One, Zero};
-use stwo_prover::constraint_framework::PREPROCESSED_TRACE_IDX;
-use stwo_prover::core::backend::simd::column::BaseColumn;
-use stwo_prover::core::backend::simd::conversion::Pack;
-use stwo_prover::core::backend::simd::m31::{PackedM31, N_LANES};
-use stwo_prover::core::backend::{Backend, BackendForChannel};
-use stwo_prover::core::channel::MerkleChannel;
-use stwo_prover::core::fields::m31::M31;
-use stwo_prover::core::pcs::{TreeSubspan, TreeVec};
-use stwo_prover::core::poly::circle::CircleEvaluation;
-use stwo_prover::core::poly::BitReversedOrder;
+use stwo::core::channel::MerkleChannel;
+use stwo::core::fields::m31::M31;
+use stwo::core::pcs::{TreeSubspan, TreeVec};
+use stwo::core::vcs::blake2_merkle::Blake2sMerkleChannel;
+use stwo::core::vcs::poseidon252_merkle::Poseidon252MerkleChannel;
+use stwo::core::vcs::MerkleHasher;
+use stwo::prover::backend::simd::column::BaseColumn;
+use stwo::prover::backend::simd::conversion::Pack;
+use stwo::prover::backend::simd::m31::{PackedM31, N_LANES};
+use stwo::prover::backend::{Backend, BackendForChannel};
+use stwo::prover::poly::circle::CircleEvaluation;
+use stwo::prover::poly::BitReversedOrder;
+use stwo_constraint_framework::PREPROCESSED_TRACE_IDX;
+
+use crate::witness::preprocessed_trace::generate_preprocessed_commitment_root;
 
 pub fn pack_values<T: Pack>(values: &[T]) -> Vec<T::SimdType> {
     values
@@ -93,7 +100,7 @@ pub trait TreeBuilder<B: Backend> {
 }
 
 impl<B: BackendForChannel<MC>, MC: MerkleChannel> TreeBuilder<B>
-    for stwo_prover::core::pcs::TreeBuilder<'_, '_, B, MC>
+    for stwo::prover::TreeBuilder<'_, '_, B, MC>
 {
     fn extend_evals(
         &mut self,
@@ -123,14 +130,64 @@ pub fn witness_trace_cells(claim: &CairoClaim, pp_trace: &PreProcessedTrace) -> 
     tree_trace_cells(log_sizes)
 }
 
+fn get_preprocessed_roots<MC: MerkleChannel>(
+    max_log_blowup_factor: u32,
+    preprocessed_trace: PreProcessedTraceVariant,
+) -> Vec<<MC::H as MerkleHasher>::Hash>
+where
+    stwo::prover::backend::simd::SimdBackend: BackendForChannel<MC>,
+{
+    (1..=max_log_blowup_factor)
+        .map(|i| generate_preprocessed_commitment_root::<MC>(i, preprocessed_trace))
+        .collect_vec()
+}
+
+/// Exports the preprocessed roots for both Blake2s and Poseidon252 channels.
+/// Note: This function is very slow and is intended for generating the preprocessed roots when
+/// needed.
+pub fn export_preprocessed_roots() {
+    let max_log_blowup_factor = 5;
+
+    // Blake2s roots.
+    let blake_roots = get_preprocessed_roots::<Blake2sMerkleChannel>(
+        max_log_blowup_factor,
+        PreProcessedTraceVariant::Canonical,
+    );
+    blake_roots.iter().enumerate().for_each(|(i, root)| {
+        let root_bytes = root.0;
+        let u32s_hex = root_bytes
+            .array_chunks::<4>()
+            .map(|&bytes| format!("{:#010x}", u32::from_le_bytes(bytes)))
+            .collect_vec()
+            .join(", ");
+
+        println!("log_blowup_factor: {}, blake root: [{}]", i + 1, u32s_hex);
+    });
+
+    // Poseidon252 roots.
+    get_preprocessed_roots::<Poseidon252MerkleChannel>(
+        max_log_blowup_factor,
+        PreProcessedTraceVariant::CanonicalWithoutPedersen,
+    )
+    .into_iter()
+    .enumerate()
+    .for_each(|(i, root)| {
+        println!(
+            "log_blowup_factor: {}, poseidon root: [{:#010x}]",
+            i + 1,
+            root
+        );
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use rand::rngs::SmallRng;
     use rand::{Rng, SeedableRng};
     use rayon::iter::{IntoParallelIterator, ParallelIterator};
-    use stwo_prover::core::backend::simd::m31::N_LANES;
-    use stwo_prover::core::fields::m31::M31;
-    use stwo_prover::core::pcs::TreeVec;
+    use stwo::core::fields::m31::M31;
+    use stwo::core::pcs::TreeVec;
+    use stwo::prover::backend::simd::m31::N_LANES;
 
     use super::Enabler;
     use crate::witness::utils::tree_trace_cells;

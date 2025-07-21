@@ -9,32 +9,6 @@ use super::components::memory_id_to_big;
 
 
 #[generate_trait]
-pub impl U32Impl of U32ExTrait {
-    /// Returns the smallest power of two greater than or equal to self.
-    ///
-    /// Panics if the next power of two is greater than the type’s maximum value.
-    fn next_power_of_two(self: u32) -> u32 {
-        let mut next_power_of_two = 1;
-        while next_power_of_two < self {
-            next_power_of_two *= 2;
-        }
-        next_power_of_two
-    }
-
-    /// Returns the base 2 logarithm of the number, rounded down.
-    fn ilog2(self: u32) -> u32 {
-        let self: u64 = self.into();
-        let mut res = 0;
-        let mut next_power_of_two = 1;
-        while next_power_of_two < self {
-            next_power_of_two *= 2;
-            res += 1;
-        }
-        res
-    }
-}
-
-#[generate_trait]
 pub impl UsizeImpl of UsizeExTrait {
     /// Calculates the quotient of `self` and `other`, rounding the result towards positive
     /// infinity.
@@ -78,8 +52,7 @@ pub fn tree_array_concat_cols(tree_array: Array<TreeArray<Span<u32>>>) -> TreeAr
 
 /// Splits a 252 bit dense representation into felts, each with `N_BITS_PER_FELT` bits.
 pub fn split_f252(x: [u32; 8]) -> [M31; memory_id_to_big::N_M31_IN_FELT252] {
-    let mask = pow2(memory_id_to_big::N_BITS_PER_FELT) - 1;
-    let segments: [u32; memory_id_to_big::N_M31_IN_FELT252] = split(x, mask);
+    let segments: [u32; memory_id_to_big::N_M31_IN_FELT252] = split(x);
     let mut m31_segments = array![];
 
     for segment in segments.span() {
@@ -104,6 +77,27 @@ pub fn construct_f252(x: Box<[u32; 8]>) -> felt252 {
     result * offset + l0.into()
 }
 
+/// Deconstructs a `felt252` to 8 u32 little-endian limbs.
+pub fn deconstruct_f252(x: felt252) -> Box<[u32; 8]> {
+    let offset = 0x100000000;
+    let cur: u256 = x.into();
+    let (cur, l0) = DivRem::div_rem(cur, offset);
+    let (cur, l1) = DivRem::div_rem(cur, offset);
+    let (cur, l2) = DivRem::div_rem(cur, offset);
+    let (cur, l3) = DivRem::div_rem(cur, offset);
+    let (cur, l4) = DivRem::div_rem(cur, offset);
+    let (cur, l5) = DivRem::div_rem(cur, offset);
+    let (cur, l6) = DivRem::div_rem(cur, offset);
+    let (_, l7) = DivRem::div_rem(cur, offset);
+    BoxTrait::new(
+        [
+            l0.try_into().unwrap(), l1.try_into().unwrap(), l2.try_into().unwrap(),
+            l3.try_into().unwrap(), l4.try_into().unwrap(), l5.try_into().unwrap(),
+            l6.try_into().unwrap(), l7.try_into().unwrap(),
+        ],
+    )
+}
+
 
 /// Splits a 32N bit dense representation into felts, each with N_BITS_PER_FELT bits.
 ///
@@ -111,25 +105,25 @@ pub fn construct_f252(x: Box<[u32; 8]>) -> felt252 {
 /// - `N`: the number of 32-bit words in the input.
 /// - `M`: the number of felts in the output.
 /// - `x`: the input dense representation.
-/// - `mask`: (1 << N_BITS_PER_FELT) - 1.
-// TODO: Why is the mask passed?
 fn split<
     const N: usize,
     const M: usize,
     impl FixedArrayToSpan: ToSpanTrait<[u32; N], u32>,
     impl SpanTryIntoFixedArray: TryInto<Span<u32>, @Box<[u32; M]>>,
 >(
-    x: [u32; N], mask: u32,
+    x: [u32; N],
 ) -> [u32; M] {
     let mut res = array![];
     let mut n_bits_in_word = 32;
     let mut word_iter = FixedArrayToSpan::span(@x).into_iter();
     let mut word = *word_iter.next().unwrap_or(@0);
 
+    let shift = pow2(memory_id_to_big::N_BITS_PER_FELT).try_into().unwrap();
     for _ in 0..M {
         if n_bits_in_word > memory_id_to_big::N_BITS_PER_FELT {
-            res.append(word & mask);
-            word /= pow2(memory_id_to_big::N_BITS_PER_FELT);
+            let (high, low) = DivRem::div_rem(word, shift);
+            res.append(low);
+            word = high;
             n_bits_in_word -= memory_id_to_big::N_BITS_PER_FELT;
             continue;
         }
@@ -140,7 +134,10 @@ fn split<
 
         // If we need more bits to fill, take from next word.
         if n_bits_in_word < memory_id_to_big::N_BITS_PER_FELT {
-            segment = segment | ((WrappingMul::wrapping_mul(word, pow2(n_bits_in_word))) & mask);
+            let (_high, low) = DivRem::div_rem(
+                WrappingMul::wrapping_mul(word, pow2(n_bits_in_word)), shift,
+            );
+            segment = segment + low;
             word /= pow2(memory_id_to_big::N_BITS_PER_FELT - n_bits_in_word);
         }
 
@@ -150,18 +147,4 @@ fn split<
     }
 
     (*SpanTryIntoFixedArray::try_into(res.span()).unwrap()).unbox()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::construct_f252;
-
-    #[test]
-    fn test_construct_felt() {
-        let felt_apart = [1_u32, 2, 3, 4, 5, 6, 7, 8];
-        assert_eq!(
-            construct_f252(BoxTrait::new(felt_apart)),
-            0x800000007000000060000000500000004000000030000000200000001,
-        );
-    }
 }

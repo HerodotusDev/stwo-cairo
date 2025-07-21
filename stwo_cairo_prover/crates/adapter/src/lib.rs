@@ -1,29 +1,79 @@
+use std::ops::Deref;
+
 use builtins::BuiltinSegments;
 pub use cairo_vm::stdlib::collections::HashMap;
 use cairo_vm::types::builtin_name::BuiltinName;
+use indoc::formatdoc;
 use memory::Memory;
 use opcodes::StateTransitions;
 use serde::{Deserialize, Serialize};
-use stwo_cairo_common::prover_types::cpu::M31;
 
+pub mod adapter;
 pub mod builtins;
 pub mod decode;
 pub mod memory;
 pub mod opcodes;
-pub mod plain;
 pub mod relocator;
+pub mod test_utils;
 pub mod vm_import;
 
 pub const N_REGISTERS: usize = 3;
 
 /// Externally provided inputs for the Stwo prover.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProverInput {
     pub state_transitions: StateTransitions,
-    pub instruction_by_pc: HashMap<M31, u128>,
     pub memory: Memory,
+    pub inst_cache: Vec<(u32, u128)>,
     pub public_memory_addresses: Vec<u32>,
     pub builtins_segments: BuiltinSegments,
+    pub public_segment_context: PublicSegmentContext,
+}
+
+const N_PUBLIC_SEGMENTS: usize = 11;
+
+/// Represents the pointer arguments of the `main` function.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PublicSegmentContext {
+    present: [bool; N_PUBLIC_SEGMENTS],
+}
+impl PublicSegmentContext {
+    pub fn new(vm_format: &[BuiltinName]) -> Self {
+        let mut present = [false; N_PUBLIC_SEGMENTS];
+        for builtin in vm_format {
+            match builtin {
+                BuiltinName::output => present[0] = true,
+                BuiltinName::pedersen => present[1] = true,
+                BuiltinName::range_check => present[2] = true,
+                BuiltinName::ecdsa => present[3] = true,
+                BuiltinName::bitwise => present[4] = true,
+                BuiltinName::ec_op => present[5] = true,
+                BuiltinName::keccak => present[6] = true,
+                BuiltinName::poseidon => present[7] = true,
+                BuiltinName::range_check96 => present[8] = true,
+                BuiltinName::add_mod => present[9] = true,
+                BuiltinName::mul_mod => present[10] = true,
+                BuiltinName::segment_arena => {
+                    // Do nothing.
+                }
+            }
+        }
+        Self { present }
+    }
+
+    pub const fn bootloader_context() -> Self {
+        // Bootloader always uses every builtin.
+        Self {
+            present: [true; N_PUBLIC_SEGMENTS],
+        }
+    }
+}
+impl Deref for PublicSegmentContext {
+    type Target = [bool; N_PUBLIC_SEGMENTS];
+
+    fn deref(&self) -> &Self::Target {
+        &self.present
+    }
 }
 
 /// Sizes of memory address to ID and ID to value tables.
@@ -66,7 +116,7 @@ impl ExecutionResources {
                 id_to_big: input.memory.f252_values.len(),
                 id_to_small: input.memory.small_values.len(),
             },
-            verify_instructions_count: input.instruction_by_pc.len(),
+            verify_instructions_count: input.inst_cache.len(),
         }
     }
 }
@@ -93,4 +143,49 @@ macro_rules! relocated_trace_entry {
             pc: $val3,
         }
     };
+}
+
+pub fn log_prover_input(
+    ProverInput {
+        state_transitions,
+        memory,
+        inst_cache: _,
+        public_memory_addresses: _,
+        builtins_segments: _,
+        public_segment_context: _,
+    }: &ProverInput,
+) {
+    log_memory(memory);
+    log::info!(
+        "Casm states by opcode:\n{}",
+        state_transitions.casm_states_by_opcode
+    );
+}
+
+fn log_memory(memory: &Memory) {
+    let n_address_to_id = memory.address_to_id.len();
+    let log_n_address_to_id = (n_address_to_id as f64).log2();
+    let n_big_values = memory.f252_values.len();
+    let log_n_big_values = (n_big_values as f64).log2();
+    let n_small_values = memory.small_values.len();
+    let log_n_small_values = (n_small_values as f64).log2();
+    let n_id_to_value = n_big_values + n_small_values;
+    let log_n_id_to_value = (n_id_to_value as f64).log2();
+    let log = formatdoc! {
+        "Memory resources:
+        Address to ID: {:?}, 2 ** {:.2?}
+        ID to VALUE, big values: {:?}, 2 ** {:.2?}
+        ID to VALUE, small values: {:?}, 2 ** {:.2?}
+        ID to VALUE (big + small): {:?}, 2 ** {:.2?}
+        ",
+        n_address_to_id,
+        log_n_address_to_id,
+        n_big_values,
+        log_n_big_values,
+        n_small_values,
+        log_n_small_values,
+        n_id_to_value,
+        log_n_id_to_value,
+    };
+    log::info!("{}", log);
 }

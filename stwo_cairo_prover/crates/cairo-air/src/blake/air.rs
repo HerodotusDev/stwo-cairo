@@ -1,19 +1,19 @@
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
-use stwo_cairo_serialize::CairoSerialize;
-use stwo_prover::constraint_framework::TraceLocationAllocator;
-use stwo_prover::core::air::ComponentProver;
-use stwo_prover::core::backend::simd::SimdBackend;
-use stwo_prover::core::channel::Channel;
-use stwo_prover::core::fields::qm31::QM31;
-use stwo_prover::core::pcs::TreeVec;
+use stwo::core::channel::Channel;
+use stwo::core::fields::qm31::QM31;
+use stwo::core::pcs::TreeVec;
+use stwo::prover::backend::simd::SimdBackend;
+use stwo::prover::ComponentProver;
+use stwo_cairo_serialize::{CairoDeserialize, CairoSerialize};
+use stwo_constraint_framework::TraceLocationAllocator;
 
-use crate::air::CairoInteractionElements;
+use crate::air::{accumulate_relation_uses, CairoInteractionElements, RelationUsesDict};
 use crate::components::{
     blake_g, blake_round, blake_round_sigma, triple_xor_32, verify_bitwise_xor_12,
 };
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct BlakeContextClaim {
     pub claim: Option<Claim>,
 }
@@ -30,9 +30,15 @@ impl BlakeContextClaim {
             .map(|claim| claim.log_sizes())
             .unwrap_or_default()
     }
+
+    pub fn accumulate_relation_uses(&self, relation_uses: &mut RelationUsesDict) {
+        if let Some(claim) = &self.claim {
+            claim.accumulate_relation_uses(relation_uses);
+        }
+    }
 }
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct Claim {
     pub blake_round: blake_round::Claim,
     pub blake_g: blake_g::Claim,
@@ -61,9 +67,39 @@ impl Claim {
 
         TreeVec::concat_cols(log_sizes)
     }
+
+    pub fn accumulate_relation_uses(&self, relation_uses: &mut RelationUsesDict) {
+        let Self {
+            blake_round,
+            blake_g,
+            blake_sigma: _,
+            triple_xor_32,
+            verify_bitwise_xor_12: _,
+        } = self;
+
+        // NOTE: The following components do not USE relations:
+        // - blake_sigma
+        // - verify_bitwise_xor_12
+
+        accumulate_relation_uses(
+            relation_uses,
+            blake_round::RELATION_USES_PER_ROW,
+            blake_round.log_size,
+        );
+        accumulate_relation_uses(
+            relation_uses,
+            blake_g::RELATION_USES_PER_ROW,
+            blake_g.log_size,
+        );
+        accumulate_relation_uses(
+            relation_uses,
+            triple_xor_32::RELATION_USES_PER_ROW,
+            triple_xor_32.log_size,
+        );
+    }
 }
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct BlakeContextInteractionClaim {
     pub claim: Option<InteractionClaim>,
 }
@@ -82,7 +118,7 @@ impl BlakeContextInteractionClaim {
     }
 }
 
-#[derive(Serialize, Deserialize, CairoSerialize)]
+#[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct InteractionClaim {
     pub blake_round: blake_round::InteractionClaim,
     pub blake_g: blake_g::InteractionClaim,

@@ -1,6 +1,6 @@
 use crate::components::prelude::*;
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct ModWordsTo12BitArray {}
 
 impl ModWordsTo12BitArray {
@@ -11,7 +11,7 @@ impl ModWordsTo12BitArray {
     #[allow(unused_variables)]
     #[allow(clippy::too_many_arguments)]
     pub fn evaluate<E: EvalAtRow>(
-        [mod_words_to_12_bit_array_input_limb_0, mod_words_to_12_bit_array_input_limb_1, mod_words_to_12_bit_array_input_limb_2, mod_words_to_12_bit_array_input_limb_3, mod_words_to_12_bit_array_input_limb_4, mod_words_to_12_bit_array_input_limb_5, mod_words_to_12_bit_array_input_limb_6, mod_words_to_12_bit_array_input_limb_7, mod_words_to_12_bit_array_input_limb_8, mod_words_to_12_bit_array_input_limb_9, mod_words_to_12_bit_array_input_limb_10, mod_words_to_12_bit_array_input_limb_11, mod_words_to_12_bit_array_input_limb_12, mod_words_to_12_bit_array_input_limb_13, mod_words_to_12_bit_array_input_limb_14, mod_words_to_12_bit_array_input_limb_15, mod_words_to_12_bit_array_input_limb_16, mod_words_to_12_bit_array_input_limb_17, mod_words_to_12_bit_array_input_limb_18, mod_words_to_12_bit_array_input_limb_19, mod_words_to_12_bit_array_input_limb_20, mod_words_to_12_bit_array_input_limb_21, mod_words_to_12_bit_array_input_limb_22, mod_words_to_12_bit_array_input_limb_23, mod_words_to_12_bit_array_input_limb_24, mod_words_to_12_bit_array_input_limb_25, mod_words_to_12_bit_array_input_limb_26, mod_words_to_12_bit_array_input_limb_27, mod_words_to_12_bit_array_input_limb_28, mod_words_to_12_bit_array_input_limb_29, mod_words_to_12_bit_array_input_limb_30, mod_words_to_12_bit_array_input_limb_31, mod_words_to_12_bit_array_input_limb_32, mod_words_to_12_bit_array_input_limb_33, mod_words_to_12_bit_array_input_limb_34, mod_words_to_12_bit_array_input_limb_35, mod_words_to_12_bit_array_input_limb_36, mod_words_to_12_bit_array_input_limb_37, mod_words_to_12_bit_array_input_limb_38, mod_words_to_12_bit_array_input_limb_39, mod_words_to_12_bit_array_input_limb_40, mod_words_to_12_bit_array_input_limb_41, mod_words_to_12_bit_array_input_limb_42, mod_words_to_12_bit_array_input_limb_43, mod_words_to_12_bit_array_input_limb_44, mod_words_to_12_bit_array_input_limb_45, mod_words_to_12_bit_array_input_limb_46, mod_words_to_12_bit_array_input_limb_47, mod_words_to_12_bit_array_input_limb_48, mod_words_to_12_bit_array_input_limb_49, mod_words_to_12_bit_array_input_limb_50, mod_words_to_12_bit_array_input_limb_51, mod_words_to_12_bit_array_input_limb_52, mod_words_to_12_bit_array_input_limb_53, mod_words_to_12_bit_array_input_limb_54, mod_words_to_12_bit_array_input_limb_55]: [E::F; 56],
+        [mod_words_to_12_bit_array_input_limb_0, mod_words_to_12_bit_array_input_limb_1, mod_words_to_12_bit_array_input_limb_2, mod_words_to_12_bit_array_input_limb_3, mod_words_to_12_bit_array_input_limb_4, mod_words_to_12_bit_array_input_limb_5, mod_words_to_12_bit_array_input_limb_6, mod_words_to_12_bit_array_input_limb_7, mod_words_to_12_bit_array_input_limb_8, mod_words_to_12_bit_array_input_limb_9, mod_words_to_12_bit_array_input_limb_10, mod_words_to_12_bit_array_input_limb_28, mod_words_to_12_bit_array_input_limb_29, mod_words_to_12_bit_array_input_limb_30, mod_words_to_12_bit_array_input_limb_31, mod_words_to_12_bit_array_input_limb_32, mod_words_to_12_bit_array_input_limb_33, mod_words_to_12_bit_array_input_limb_34, mod_words_to_12_bit_array_input_limb_35, mod_words_to_12_bit_array_input_limb_36, mod_words_to_12_bit_array_input_limb_37, mod_words_to_12_bit_array_input_limb_38]: [E::F; 22],
         limb1b_0_col0: E::F,
         limb2b_0_col1: E::F,
         limb5b_0_col2: E::F,
@@ -22,8 +22,8 @@ impl ModWordsTo12BitArray {
         limb5b_1_col7: E::F,
         limb6b_1_col8: E::F,
         limb9b_1_col9: E::F,
-        eval: &mut E,
         range_check_3_6_6_3_lookup_elements: &relations::RangeCheck_3_6_6_3,
+        eval: &mut E,
     ) -> [E::F; 16] {
         let M31_512 = E::F::from(M31::from(512));
         let M31_64 = E::F::from(M31::from(64));

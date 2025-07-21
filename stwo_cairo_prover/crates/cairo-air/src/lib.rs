@@ -1,4 +1,5 @@
 #![feature(portable_simd)]
+#![feature(array_chunks)]
 use serde::{Deserialize, Serialize};
 
 use crate::preprocessed::PreProcessedTrace;
@@ -14,6 +15,7 @@ pub mod preprocessed;
 pub mod preprocessed_utils;
 pub mod range_checks_air;
 pub mod relations;
+pub mod utils;
 
 // TODO(Ohad): verifier crate.
 pub mod verifier;

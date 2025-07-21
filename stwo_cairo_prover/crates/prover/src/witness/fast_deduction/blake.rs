@@ -5,7 +5,7 @@ use stwo_cairo_adapter::memory::Memory;
 use stwo_cairo_common::preprocessed_consts::blake::{BLAKE_SIGMA, N_BLAKE_SIGMA_COLS};
 use stwo_cairo_common::prover_types::simd::{PackedUInt32, N_LANES};
 
-use crate::stwo_prover::core::backend::simd::m31::PackedM31;
+use crate::stwo::prover::backend::simd::m31::PackedM31;
 
 const NUM_INPUT_WORDS_G: usize = 6;
 const NUM_OUTPUT_WORDS_G: usize = 4;
@@ -29,8 +29,6 @@ fn rotate<const N: u32>(x: u32x16) -> u32x16 {
 #[derive(Debug)]
 pub struct PackedBlakeG {}
 
-// TODO(Stav): remove '#[allow(unused)]' when possible.
-#[allow(unused)]
 impl PackedBlakeG {
     pub fn deduce_output(
         input: [PackedUInt32; NUM_INPUT_WORDS_G],
@@ -64,8 +62,6 @@ impl PackedBlakeG {
 #[derive(Debug)]
 pub struct PackedTripleXor32 {}
 
-// TODO(Stav): remove '#[allow(unused)]' when possible.
-#[allow(unused)]
 impl PackedTripleXor32 {
     pub fn deduce_output([a, b, c]: [PackedUInt32; 3]) -> PackedUInt32 {
         a ^ b ^ c
@@ -75,8 +71,6 @@ impl PackedTripleXor32 {
 #[derive(Debug)]
 pub struct PackedBlakeRoundSigma {}
 
-// TODO(Stav): remove '#[allow(unused)]' when possible.
-#[allow(unused)]
 impl PackedBlakeRoundSigma {
     pub fn deduce_output(round: PackedM31) -> [PackedM31; N_BLAKE_SIGMA_COLS] {
         Self::packed_sigma(round.into_simd()).map(|v| unsafe { PackedM31::from_simd_unchecked(v) })
@@ -91,8 +85,6 @@ pub struct BlakeRound {
     memory: Memory,
 }
 
-// TODO(Stav): remove '#[allow(unused)]' when possible.
-#[allow(unused)]
 impl BlakeRound {
     pub fn new(memory: Memory) -> Self {
         Self { memory }
@@ -152,8 +144,8 @@ impl BlakeRound {
 
 #[cfg(test)]
 mod tests {
+    use stwo::core::fields::m31::M31;
     use stwo_cairo_adapter::memory::{MemoryBuilder, MemoryConfig, MemoryEntry};
-    use stwo_prover::core::fields::m31::M31;
 
     use super::*;
 
@@ -256,7 +248,7 @@ mod tests {
                 ]
             })
             .collect();
-        let memory =
+        let (memory, ..) =
             MemoryBuilder::from_iter(MemoryConfig::default(), memory_entries.iter().cloned())
                 .build();
 

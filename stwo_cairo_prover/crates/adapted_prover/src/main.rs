@@ -6,22 +6,22 @@ use cairo_air::verifier::{verify_cairo, CairoVerificationError};
 use cairo_air::PreProcessedTraceVariant;
 use clap::Parser;
 use serde::Serialize;
-use stwo_cairo_adapter::vm_import::{adapt_vm_output_shards, VmImportError};
-use stwo_cairo_adapter::ProverInput;
+use stwo::core::channel::MerkleChannel;
+use stwo::core::pcs::PcsConfig;
+use stwo::core::vcs::blake2_merkle::Blake2sMerkleChannel;
+use stwo::core::vcs::poseidon252_merkle::Poseidon252MerkleChannel;
+use stwo::core::vcs::MerkleHasher;
+use stwo::prover::backend::simd::SimdBackend;
+use stwo::prover::backend::BackendForChannel;
+use stwo::prover::ProvingError;
+use stwo_cairo_adapter::vm_import::{adapt_vm_output, adapt_vm_output_shards, VmImportError};
+use stwo_cairo_adapter::{log_prover_input, ProverInput};
 use stwo_cairo_prover::prover::{
     default_prod_prover_parameters, prove_cairo, ChannelHash, ProverParameters,
 };
 use stwo_cairo_serialize::CairoSerialize;
 use stwo_cairo_utils::binary_utils::run_binary;
 use stwo_cairo_utils::file_utils::{create_file, read_to_string, IoErrorWithPath};
-use stwo_prover::core::backend::simd::SimdBackend;
-use stwo_prover::core::backend::BackendForChannel;
-use stwo_prover::core::channel::MerkleChannel;
-use stwo_prover::core::pcs::PcsConfig;
-use stwo_prover::core::prover::ProvingError;
-use stwo_prover::core::vcs::blake2_merkle::Blake2sMerkleChannel;
-use stwo_prover::core::vcs::ops::MerkleHasher;
-use stwo_prover::core::vcs::poseidon252_merkle::Poseidon252MerkleChannel;
 use thiserror::Error;
 use tracing::{span, Level};
 
@@ -118,6 +118,8 @@ fn run(args: impl Iterator<Item = String>) -> Result<(), Error> {
     let vm_outputs: Vec<ProverInput> =
         adapt_vm_output_shards(args.pub_json.as_path(), args.priv_json.as_path(), 30)?;
 
+    // log_prover_input(&vm_output);
+
     let ProverParameters {
         channel_hash,
         pcs_config,
@@ -199,7 +201,7 @@ where
     }
     span.exit();
     if verify {
-        verify_cairo::<MC>(proof, pcs_config, preprocessed_trace)?;
+        verify_cairo::<MC>(proof, preprocessed_trace)?;
         log::info!("Proof verified successfully");
     }
 

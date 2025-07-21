@@ -89,7 +89,7 @@ pub impl CanonicCosetImpl of CanonicCosetTrait {
         assert!(self.coset.log_size.is_non_zero());
         Coset {
             initial_index: *self.coset.initial_index,
-            step_size: *self.coset.step_size + *self.coset.step_size,
+            step: *self.coset.step + *self.coset.step,
             log_size: *self.coset.log_size - 1,
         }
     }
@@ -125,40 +125,5 @@ pub struct CircleEvaluation {
 pub impl CircleEvaluationImpl of CircleEvaluationTrait {
     fn new(domain: CircleDomain, bit_reversed_values: Array<QM31>) -> CircleEvaluation {
         CircleEvaluation { bit_reversed_values, domain }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::circle::{CirclePoint, CirclePointIndexImpl, Coset, CosetImpl};
-    use crate::fields::m31::m31;
-    use super::{CircleDomain, CircleDomainTrait, CircleEvaluationImpl};
-
-    #[test]
-    fn test_circle_domain_at_1() {
-        let half_coset = Coset {
-            initial_index: CirclePointIndexImpl::new(16777216),
-            step_size: CirclePointIndexImpl::new(67108864),
-            log_size: 5,
-        };
-        let domain = CircleDomain { half_coset };
-        let index = 17;
-        let result = domain.at(index);
-
-        assert_eq!(result, CirclePoint { x: m31(7144319), y: m31(1742797653) });
-    }
-
-    #[test]
-    fn test_circle_domain_at_2() {
-        let half_coset = Coset {
-            initial_index: CirclePointIndexImpl::new(16777216),
-            step_size: CirclePointIndexImpl::new(67108864),
-            log_size: 5,
-        };
-        let domain = CircleDomain { half_coset };
-        let index = 37;
-        let result = domain.at(index);
-
-        assert_eq!(result, CirclePoint { x: m31(9803698), y: m31(2079025011) });
     }
 }

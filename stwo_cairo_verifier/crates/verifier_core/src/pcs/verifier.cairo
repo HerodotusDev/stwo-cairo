@@ -3,17 +3,16 @@ use core::iter::{IntoIterator, Iterator};
 use crate::channel::{Channel, ChannelTrait};
 use crate::circle::CirclePoint;
 use crate::fields::m31::M31;
-use crate::fields::qm31::{QM31, QM31Trait};
+use crate::fields::qm31::{QM31, QM31Serde};
 use crate::fri::{FriProof, FriVerifierImpl};
 use crate::pcs::quotients::{PointSample, fri_answers};
-use crate::utils::{ArrayImpl, DictImpl};
+use crate::utils::{ArrayImpl, DictImpl, group_columns_by_log_size};
 use crate::vcs::MerkleHasher;
 use crate::vcs::verifier::{MerkleDecommitment, MerkleVerifier, MerkleVerifierTrait};
-use crate::verifier::{FriVerificationErrorIntoVerificationError, VerificationError};
+use crate::verifier::VerificationError;
 use crate::{ColumnArray, ColumnSpan, Hash, TreeArray, TreeSpan};
 use super::PcsConfig;
 
-// TODO(andrew): Change all `Array` types to `Span`.
 #[derive(Drop, Serde)]
 pub struct CommitmentSchemeProof {
     pub config: PcsConfig,
@@ -29,7 +28,6 @@ pub struct CommitmentSchemeProof {
 
 
 /// The verifier side of a FRI polynomial commitment scheme. See [super].
-// TODO(andrew): Make generic on MerkleChannel.
 #[derive(Drop)]
 pub struct CommitmentSchemeVerifier {
     pub trees: Array<MerkleVerifier<MerkleHasher>>,
@@ -51,9 +49,17 @@ pub impl CommitmentSchemeVerifierImpl of CommitmentSchemeVerifierTrait {
         res
     }
 
+
+    /// Returns the log sizes of each column in each commitment tree.
+    fn columns_by_log_sizes(self: @CommitmentSchemeVerifier) -> TreeSpan<Span<Span<usize>>> {
+        let mut res = array![];
+        for tree in self.trees.span() {
+            res.append(*tree.columns_by_log_size);
+        }
+        res.span()
+    }
+
     /// Reads a commitment from the prover.
-    // TODO(andrew): Make commitment MerkleHasher hash type.
-    // TODO(andrew): Make channel MerkleChannel generic channel.
     fn commit(
         ref self: CommitmentSchemeVerifier,
         commitment: Hash,
@@ -65,9 +71,15 @@ pub impl CommitmentSchemeVerifierImpl of CommitmentSchemeVerifierTrait {
         for log_size in log_sizes {
             extended_log_sizes.append(*log_size + self.config.fri_config.log_blowup_factor);
         }
+
+        let columns_by_log_size = group_columns_by_log_size(extended_log_sizes.span());
         self
             .trees
-            .append(MerkleVerifier { root: commitment, column_log_sizes: extended_log_sizes });
+            .append(
+                MerkleVerifier {
+                    root: commitment, column_log_sizes: extended_log_sizes, columns_by_log_size,
+                },
+            );
     }
 
     fn verify_values(
@@ -75,7 +87,7 @@ pub impl CommitmentSchemeVerifierImpl of CommitmentSchemeVerifierTrait {
         sampled_points: TreeArray<ColumnArray<Array<CirclePoint<QM31>>>>,
         proof: CommitmentSchemeProof,
         ref channel: Channel,
-    ) -> Result<(), VerificationError> {
+    ) {
         let CommitmentSchemeProof {
             config: _,
             commitments: _,
@@ -98,57 +110,40 @@ pub impl CommitmentSchemeVerifierImpl of CommitmentSchemeVerifierTrait {
 
         channel.mix_felts(flattened_sampled_values.span());
 
-        let random_coeff = channel.draw_felt();
+        let random_coeff = channel.draw_secure_felt();
         let column_log_sizes = self.column_log_sizes();
         let fri_config = self.config.fri_config;
         let log_blowup_factor = fri_config.log_blowup_factor;
         let column_log_bounds = get_column_log_bounds(@column_log_sizes, log_blowup_factor).span();
 
         // FRI commitment phase on OODS quotients.
-        let mut fri_verifier =
-            match FriVerifierImpl::commit(ref channel, fri_config, fri_proof, column_log_bounds) {
-            Ok(fri_verifier) => fri_verifier,
-            Err(err) => { return Err(VerificationError::Fri(err)); },
-        };
+        let mut fri_verifier = FriVerifierImpl::commit(
+            ref channel, fri_config, fri_proof, column_log_bounds,
+        );
 
         // Verify proof of work.
-        channel.mix_u64(proof_of_work_nonce);
-
-        if !channel.check_proof_of_work(self.config.pow_bits) {
-            return Err(VerificationError::ProofOfWork);
-        }
+        assert!(
+            channel.mix_and_check_pow_nonce(self.config.pow_bits, proof_of_work_nonce),
+            "{}",
+            VerificationError::QueriesProofOfWork,
+        );
 
         // Get FRI query positions.
         let (unique_column_log_sizes, mut query_positions_by_log_size) = fri_verifier
             .sample_query_positions(ref channel);
 
-        // Verify merkle decommitments.
+        // Verify Merkle decommitments.
         let mut decommitments = decommitments.into_iter();
 
-        let n_trees = self.trees.len();
-        let mut tree_i = 0;
-        loop {
-            if tree_i == n_trees {
-                break Ok(());
-            }
-
-            let tree = self.trees[tree_i];
+        for (tree, queried_values) in self.trees.span().into_iter().zip(queried_values.span()) {
             let decommitment = decommitments.next().unwrap();
-            let queried_values = *queried_values[tree_i];
 
-            // TODO(andrew): Unfortunately the current merkle implementation pops values from the
-            // query position dict so it has to be duplicated.
-            if let Err(err) = tree
-                .verify(
-                    query_positions_by_log_size.clone_subset(unique_column_log_sizes),
-                    queried_values,
-                    decommitment,
-                ) {
-                break Err(VerificationError::Merkle(err));
-            }
+            // The Merkle implementation pops values from the query position dict so it has to
+            // be duplicated.
+            let query_positions = query_positions_by_log_size.clone_subset(unique_column_log_sizes);
 
-            tree_i += 1;
-        }?;
+            tree.verify(query_positions, *queried_values, decommitment);
+        }
 
         // Check iterators have been fully consumed.
         assert!(decommitments.next().is_none());
@@ -157,18 +152,14 @@ pub impl CommitmentSchemeVerifierImpl of CommitmentSchemeVerifierTrait {
         let samples = get_flattened_samples(sampled_points, sampled_values);
 
         let fri_answers = fri_answers(
-            column_log_sizes.span(),
-            samples.span(),
+            self.columns_by_log_sizes(),
+            samples,
             random_coeff,
             query_positions_by_log_size,
             queried_values,
-        )?;
+        );
 
-        if let Err(err) = fri_verifier.decommit(fri_answers) {
-            return Err(VerificationError::Fri(err));
-        }
-
-        Ok(())
+        fri_verifier.decommit(fri_answers);
     }
 }
 
@@ -206,41 +197,23 @@ fn get_column_log_bounds(
 #[inline]
 fn get_flattened_samples(
     sampled_points: TreeArray<ColumnArray<Array<CirclePoint<QM31>>>>,
-    sampled_values: TreeSpan<ColumnSpan<Span<QM31>>>,
-) -> ColumnArray<Array<PointSample>> {
+    mut sampled_values: TreeSpan<ColumnSpan<Span<QM31>>>,
+) -> TreeSpan<ColumnSpan<Array<PointSample>>> {
     let mut res = array![];
-    let n_trees = sampled_points.len();
     assert!(sampled_points.len() == sampled_values.len());
-
-    let mut tree_i = 0;
-    while tree_i < n_trees {
-        let tree_points = sampled_points[tree_i];
-        let tree_values = *sampled_values[tree_i];
+    for (tree_points, tree_values) in sampled_points.span().into_iter().zip(sampled_values) {
+        let mut tree_samples = array![];
         assert!(tree_points.len() == tree_values.len());
-        let n_columns = tree_points.len();
-
-        let mut column_i = 0;
-        while column_i < n_columns {
-            let column_points = tree_points[column_i];
-            let column_values = *tree_values[column_i];
-
-            let n_samples = column_points.len();
-            assert!(column_points.len() == column_values.len());
+        for (column_points, column_values) in tree_points.into_iter().zip(tree_values) {
             let mut column_samples = array![];
-
-            let mut sample_i = 0;
-            while sample_i < n_samples {
-                let point = *column_points[sample_i];
-                let value = *column_values[sample_i];
-                column_samples.append(PointSample { point, value });
-                sample_i += 1;
+            assert!(column_points.len() == column_values.len());
+            for (point, value) in column_points.into_iter().zip(column_values) {
+                column_samples.append(PointSample { point: *point, value: *value });
             }
 
-            res.append(column_samples);
-            column_i += 1;
+            tree_samples.append(column_samples);
         }
-
-        tree_i += 1;
+        res.append(tree_samples.span());
     }
-    res
+    res.span()
 }

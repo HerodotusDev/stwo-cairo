@@ -1,6 +1,6 @@
 use crate::components::prelude::*;
 
-#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize)]
+#[derive(Copy, Clone, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
 pub struct DecodeInstruction3802D {}
 
 impl DecodeInstruction3802D {
@@ -11,7 +11,7 @@ impl DecodeInstruction3802D {
     #[allow(unused_variables)]
     #[allow(clippy::too_many_arguments)]
     pub fn evaluate<E: EvalAtRow>(
-        decode_instruction_3802d5ea8e8d383b_input: E::F,
+        [decode_instruction_3802d_input_pc]: [E::F; 1],
         offset0_col0: E::F,
         offset1_col1: E::F,
         offset2_col2: E::F,
@@ -21,10 +21,9 @@ impl DecodeInstruction3802D {
         op1_base_fp_col6: E::F,
         res_add_col7: E::F,
         ap_update_add_1_col8: E::F,
-        eval: &mut E,
         verify_instruction_lookup_elements: &relations::VerifyInstruction,
-    ) -> [E::F; 19] {
-        let M31_0 = E::F::from(M31::from(0));
+        eval: &mut E,
+    ) -> [E::F; 5] {
         let M31_1 = E::F::from(M31::from(1));
         let M31_128 = E::F::from(M31::from(128));
         let M31_16 = E::F::from(M31::from(16));
@@ -65,7 +64,7 @@ impl DecodeInstruction3802D {
             verify_instruction_lookup_elements,
             E::EF::one(),
             &[
-                decode_instruction_3802d5ea8e8d383b_input.clone(),
+                decode_instruction_3802d_input_pc.clone(),
                 offset0_col0.clone(),
                 offset1_col1.clone(),
                 offset2_col2.clone(),
@@ -87,22 +86,8 @@ impl DecodeInstruction3802D {
             (offset0_col0.clone() - M31_32768.clone()),
             (offset1_col1.clone() - M31_32768.clone()),
             (offset2_col2.clone() - M31_32768.clone()),
-            dst_base_fp_col3.clone(),
-            op0_base_fp_col4.clone(),
-            op1_imm_col5.clone(),
-            op1_base_fp_col6.clone(),
             ((M31_1.clone() - op1_imm_col5.clone()) - op1_base_fp_col6.clone()),
-            res_add_col7.clone(),
             (M31_1.clone() - res_add_col7.clone()),
-            M31_0.clone(),
-            M31_0.clone(),
-            M31_0.clone(),
-            M31_0.clone(),
-            ap_update_add_1_col8.clone(),
-            M31_0.clone(),
-            M31_0.clone(),
-            M31_1.clone(),
-            M31_3.clone(),
         ]
     }
 }
