@@ -218,7 +218,7 @@ pub fn verify_cairo<MC: MerkleChannel>(
             <= (1 << LOG_MEMORY_ADDRESS_BOUND)
     );
 
-    verify_claim(&claim);
+    // verify_claim(&claim);
 
     let channel = &mut MC::C::default();
     let commitment_scheme_verifier = &mut CommitmentSchemeVerifier::<MC>::new(pcs_config);

@@ -1,0 +1,20 @@
+{
+  "trace_path": "trace.bin",
+  "memory_path": "memory.bin",
+  "pedersen": [],
+  "range_check": [],
+  "range_check96": [],
+  "ecdsa": [],
+  "bitwise": [],
+  "ec_op": [],
+  "keccak": [],
+  "poseidon": [],
+  "add_mod": {
+    "instances": [],
+    "zero_value_address": 22919
+  },
+  "mul_mod": {
+    "instances": [],
+    "zero_value_address": 22919
+  }
+}
