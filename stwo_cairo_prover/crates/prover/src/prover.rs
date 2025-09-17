@@ -428,6 +428,55 @@ pub mod tests {
         }
 
         #[test]
+        fn test_prove_verify_fibonacci_4m() {
+            let compiled_program =
+                get_compiled_cairo_program_path("test_prove_verify_fibonacci_4M");
+            let input = run_program_and_adapter(&compiled_program, ProgramType::Json, None);
+            let preprocessed_trace = PreProcessedTraceVariant::CanonicalWithoutPedersen;
+            let cairo_proof = prove_cairo::<Blake2sMerkleChannel>(
+                input,
+                PcsConfig::default(),
+                preprocessed_trace,
+            )
+            .unwrap();
+            verify_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace).unwrap();
+        }
+
+        #[test]
+        fn test_prove_verify_fibonacci_4m_shards() {
+            const N_STEPS: usize = 16_000_013;
+            let compiled_program =
+                get_compiled_cairo_program_path("test_prove_verify_fibonacci_4m");
+            let shards = run_program_and_adapter_shards(
+                &compiled_program,
+                ProgramType::Json,
+                None,
+                N_STEPS / 4,
+            );
+
+            let preprocessed_trace = PreProcessedTraceVariant::CanonicalWithoutPedersen;
+            let n_shards = shards.len();
+            for (i, shard) in shards.into_iter().enumerate() {
+                tracing::info!(
+                    "Proving shard {}/{} (initial_pc={}, final_pc={})",
+                    i + 1,
+                    n_shards,
+                    shard.state_transitions.initial_state.pc.0,
+                    shard.state_transitions.final_state.pc.0
+                );
+
+                let cairo_proof = prove_cairo::<Blake2sMerkleChannel>(
+                    shard,
+                    PcsConfig::default(),
+                    preprocessed_trace,
+                )
+                .unwrap();
+                verify_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace).unwrap();
+                tracing::info!("Verified shard {}/{}", i + 1, n_shards);
+            }
+        }
+
+        #[test]
         fn test_e2e_prove_cairo_verify_all_opcode_components() {
             let compiled_program =
                 get_compiled_cairo_program_path("test_prove_verify_all_opcode_components");
