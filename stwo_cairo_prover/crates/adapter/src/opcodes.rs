@@ -625,6 +625,10 @@ pub struct StateTransitions {
     pub initial_state: CasmState,
     pub final_state: CasmState,
     pub casm_states_by_opcode: CasmStatesByOpcode,
+    #[serde(default)]
+    pub overall_initial_state: Option<CasmState>,
+    #[serde(default)]
+    pub overall_final_state: Option<CasmState>,
 }
 
 impl StateTransitions {
@@ -656,6 +660,8 @@ impl StateTransitions {
             initial_state,
             final_state,
             casm_states_by_opcode: states,
+            overall_initial_state: None,
+            overall_final_state: None,
         }
     }
 
@@ -684,6 +690,8 @@ impl StateTransitions {
             initial_state,
             final_state,
             casm_states_by_opcode,
+            overall_initial_state: None,
+            overall_final_state: None,
         }
     }
 }

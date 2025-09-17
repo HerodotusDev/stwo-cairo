@@ -56,9 +56,15 @@ where
     let mut entries = cairo_relation_entries(components, trace);
 
     // Public data.
-    let initial_pc = public_data.initial_state.pc.0;
-    let initial_ap = public_data.initial_state.ap.0;
-    let final_ap = public_data.final_state.ap.0;
+    let overall_initial_state = public_data
+        .overall_initial_state
+        .unwrap_or(public_data.initial_state);
+    let overall_final_state = public_data
+        .overall_final_state
+        .unwrap_or(public_data.final_state);
+    let initial_pc = overall_initial_state.pc.0;
+    let initial_ap = overall_initial_state.ap.0;
+    let final_ap = overall_final_state.ap.0;
     public_data
         .public_memory
         .get_entries(initial_pc, initial_ap, final_ap)
