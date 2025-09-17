@@ -230,17 +230,24 @@ pub struct PublicData {
     pub public_memory: PublicMemory,
     pub initial_state: CasmState,
     pub final_state: CasmState,
+    // Optional overall boundary states (used when proving shards).
+    #[serde(default)]
+    pub overall_initial_state: Option<CasmState>,
+    #[serde(default)]
+    pub overall_final_state: Option<CasmState>,
 }
 impl PublicData {
     /// Sums the logup of the public data.
     pub fn logup_sum(&self, lookup_elements: &CairoInteractionElements) -> QM31 {
         let mut values_to_inverse = vec![];
         // Use public memory in the memory relations.
+        let overall_initial_state = self.overall_initial_state.unwrap_or(self.initial_state);
+        let overall_final_state = self.overall_final_state.unwrap_or(self.final_state);
         self.public_memory
             .get_entries(
-                self.initial_state.pc.0,
-                self.initial_state.ap.0,
-                self.final_state.ap.0,
+                overall_initial_state.pc.0,
+                overall_initial_state.ap.0,
+                overall_final_state.ap.0,
             )
             .for_each(|(addr, id, val)| {
                 values_to_inverse.push(
@@ -278,6 +285,7 @@ impl PublicData {
             public_memory,
             initial_state,
             final_state,
+            ..
         } = self;
         public_memory.mix_into(channel);
         initial_state.mix_into(channel);

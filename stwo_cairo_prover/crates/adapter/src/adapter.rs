@@ -87,6 +87,8 @@ pub fn adapter_shards(runner: &CairoRunner, size_of_shard: usize) -> Vec<ProverI
     let relocated_memory = relocator.relocate_memory(&relocatable_memory);
 
     let relocated_trace = relocator.relocate_trace(relocatable_trace);
+    let overall_initial_state = relocated_trace.first().copied().unwrap().into();
+    let overall_final_state = relocated_trace.last().copied().unwrap().into();
     let builtin_segments = relocator.relocate_builtin_segments(&builtin_segments);
     info!("Builtin segments: {:?}", builtin_segments);
     let public_memory_addresses = relocator.relocate_public_addresses(public_memory_offsets);
@@ -107,7 +109,10 @@ pub fn adapter_shards(runner: &CairoRunner, size_of_shard: usize) -> Vec<ProverI
         let shard_trace = &relocated_trace[start..last_idx + 1];
 
         let memory = MemoryBuilder::from_iter(MemoryConfig::default(), relocated_memory.clone());
-        let state_transitions = StateTransitions::from_slice_parallel(shard_trace, &memory);
+        let mut state_transitions = StateTransitions::from_slice_parallel(shard_trace, &memory);
+        // Set overall boundaries for shards to the overall program boundaries.
+        state_transitions.overall_initial_state = Some(overall_initial_state);
+        state_transitions.overall_final_state = Some(overall_final_state);
         info!(
             "Opcode counts (shard starting at {start}): {:?}",
             state_transitions.casm_states_by_opcode.counts()
