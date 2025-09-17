@@ -15,7 +15,7 @@ use cairo_vm::vm::runners::cairo_runner::CairoRunner;
 use cairo_vm::Felt252;
 use clap::ValueEnum;
 use serde_json::from_reader;
-use stwo_cairo_adapter::adapter::adapter;
+use stwo_cairo_adapter::adapter::{adapter, adapter_shards};
 use stwo_cairo_adapter::ProverInput;
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -133,6 +133,16 @@ pub fn run_program_and_adapter(
 ) -> ProverInput {
     let runner = run_program(program_path, program_type, args);
     adapter(&runner)
+}
+
+pub fn run_program_and_adapter_shards(
+    program_path: &PathBuf,
+    program_type: ProgramType,
+    args: Option<&PathBuf>,
+    size_of_shard: usize,
+) -> Vec<ProverInput> {
+    let runner = run_program(program_path, program_type, args);
+    adapter_shards(&runner, size_of_shard)
 }
 
 fn read_compiled_cairo_program(program_path: &PathBuf) -> Program {
