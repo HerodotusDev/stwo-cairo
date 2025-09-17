@@ -151,8 +151,12 @@ impl CairoClaimGenerator {
             ..
         }: ProverInput,
     ) -> Self {
+        let overall_initial_state_opt = state_transitions.overall_initial_state;
+        let overall_final_state_opt = state_transitions.overall_final_state;
         let initial_state = state_transitions.initial_state;
         let final_state = state_transitions.final_state;
+        let overall_initial_state = overall_initial_state_opt.unwrap_or(initial_state);
+        let overall_final_state = overall_final_state_opt.unwrap_or(final_state);
         let opcodes = OpcodesClaimGenerator::new(state_transitions);
         let verify_instruction_trace_generator =
             verify_instruction::ClaimGenerator::new(inst_cache);
@@ -180,9 +184,9 @@ impl CairoClaimGenerator {
         }
 
         // Public data.
-        let initial_pc = initial_state.pc.0;
-        let initial_ap = initial_state.ap.0;
-        let final_ap = final_state.ap.0;
+        let initial_pc = overall_initial_state.pc.0;
+        let initial_ap = overall_initial_state.ap.0;
+        let final_ap = overall_final_state.ap.0;
         let public_memory = extract_sections_from_memory(
             &memory,
             initial_pc,
@@ -195,6 +199,8 @@ impl CairoClaimGenerator {
             public_memory,
             initial_state,
             final_state,
+            overall_initial_state: overall_initial_state_opt,
+            overall_final_state: overall_final_state_opt,
         };
 
         let blake_context_trace_generator = BlakeContextClaimGenerator::new(memory);

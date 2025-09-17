@@ -403,7 +403,7 @@ pub mod tests {
             let compiled_program =
                 get_compiled_cairo_program_path("test_prove_verify_all_opcode_components");
             let shards =
-                run_program_and_adapter_shards(&compiled_program, ProgramType::Json, None, 10);
+                run_program_and_adapter_shards(&compiled_program, ProgramType::Json, None, 1000);
 
             let preprocessed_trace = PreProcessedTraceVariant::CanonicalWithoutPedersen;
             let n_shards = shards.len();
