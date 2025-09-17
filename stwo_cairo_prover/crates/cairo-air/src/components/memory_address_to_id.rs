@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use stwo::core::channel::Channel;
-use stwo::core::fields::m31::M31;
 use stwo::core::fields::qm31::{SecureField, SECURE_EXTENSION_DEGREE};
 use stwo::core::pcs::TreeVec;
 use stwo_cairo_common::preprocessed_columns::preprocessed_trace::{PreProcessedColumn, Seq};
@@ -23,7 +22,7 @@ use crate::relations;
 /// ID2 = [id6, id7, id8, 0]
 /// ID3 = [id9, id10, 0, 0]
 pub const MEMORY_ADDRESS_TO_ID_SPLIT: usize = 16;
-pub const N_ID_AND_MULT_COLUMNS_PER_CHUNK: usize = 2;
+pub const N_ID_AND_MULT_COLUMNS_PER_CHUNK: usize = 3;
 pub const N_TRACE_COLUMNS: usize = MEMORY_ADDRESS_TO_ID_SPLIT * N_ID_AND_MULT_COLUMNS_PER_CHUNK;
 
 pub type Component = FrameworkComponent<Eval>;
@@ -54,13 +53,10 @@ impl FrameworkEval for Eval {
 
     fn evaluate<E: EvalAtRow>(&self, mut eval: E) -> E {
         // Addresses are offsetted by 1, as 0 address is reserved.
-        let seq_plus_one =
-            eval.get_preprocessed_column(Seq::new(self.log_size()).id()) + E::F::from(M31(1));
-        for i in 0..MEMORY_ADDRESS_TO_ID_SPLIT {
+        for _ in 0..MEMORY_ADDRESS_TO_ID_SPLIT {
+            let address = eval.next_trace_mask();
             let id = eval.next_trace_mask();
             let multiplicity = eval.next_trace_mask();
-            let address =
-                seq_plus_one.clone() + E::F::from(M31((i * (1 << self.log_size())) as u32));
             eval.add_to_relation(RelationEntry::new(
                 &self.lookup_elements,
                 E::EF::from(-multiplicity),
