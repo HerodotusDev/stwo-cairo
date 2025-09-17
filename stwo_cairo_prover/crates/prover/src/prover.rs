@@ -347,7 +347,6 @@ pub mod tests {
     }
 
     #[cfg(test)]
-    #[cfg(feature = "slow-tests")]
     pub mod slow_tests {
 
         use std::io::Write;
@@ -359,6 +358,7 @@ pub mod tests {
         use stwo::core::fri::FriConfig;
         use stwo::core::pcs::PcsConfig;
         use stwo::core::vcs::blake2_merkle::Blake2sMerkleChannel;
+        use stwo_cairo_adapter::utils::{run_program_and_adapter_shards, ProgramType};
         use stwo_cairo_common::preprocessed_columns::preprocessed_trace::PreProcessedTrace;
         use stwo_cairo_serialize::CairoSerialize;
         use tempfile::NamedTempFile;
@@ -396,6 +396,35 @@ pub mod tests {
             )
             .unwrap();
             verify_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace).unwrap();
+        }
+
+        #[test]
+        fn test_prove_verify_all_opcode_components_shards() {
+            let compiled_program =
+                get_compiled_cairo_program_path("test_prove_verify_all_opcode_components");
+            let shards =
+                run_program_and_adapter_shards(&compiled_program, ProgramType::Json, None, 10);
+
+            let preprocessed_trace = PreProcessedTraceVariant::CanonicalWithoutPedersen;
+            let n_shards = shards.len();
+            for (i, shard) in shards.into_iter().enumerate() {
+                tracing::info!(
+                    "Proving shard {}/{} (initial_pc={}, final_pc={})",
+                    i + 1,
+                    n_shards,
+                    shard.state_transitions.initial_state.pc.0,
+                    shard.state_transitions.final_state.pc.0
+                );
+
+                let cairo_proof = prove_cairo::<Blake2sMerkleChannel>(
+                    shard,
+                    PcsConfig::default(),
+                    preprocessed_trace,
+                )
+                .unwrap();
+                verify_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace).unwrap();
+                tracing::info!("Verified shard {}/{}", i + 1, n_shards);
+            }
         }
 
         #[test]
