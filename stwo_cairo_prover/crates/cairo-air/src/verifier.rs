@@ -12,7 +12,6 @@ use stwo_cairo_adapter::builtins::{
 };
 use stwo_cairo_adapter::memory::LARGE_MEMORY_VALUE_ID_BASE;
 use stwo_cairo_adapter::HashMap;
-use stwo_cairo_common::memory::LOG_MEMORY_ADDRESS_BOUND;
 use stwo_cairo_common::prover_types::cpu::PRIME;
 use stwo_constraint_framework::PREPROCESSED_TRACE_IDX;
 use thiserror::Error;
@@ -22,7 +21,6 @@ use crate::air::{
     PublicMemory, PublicSegmentRanges, SegmentRange,
 };
 use crate::builtins_air::BuiltinsClaim;
-use crate::components::memory_address_to_id::MEMORY_ADDRESS_TO_ID_SPLIT;
 use crate::{CairoProof, PreProcessedTraceVariant};
 
 fn verify_claim(claim: &CairoClaim) {
@@ -280,13 +278,6 @@ pub fn verify_cairo<MC: MerkleChannel>(
     }: CairoProof<MC::H>,
     preprocessed_trace: PreProcessedTraceVariant,
 ) -> Result<(), CairoVerificationError> {
-    // Auxiliary verifications.
-    // Assert that ADDRESS->ID component does not overflow.
-    assert!(
-        (1 << claim.memory_address_to_id.log_size) * MEMORY_ADDRESS_TO_ID_SPLIT
-            <= (1 << LOG_MEMORY_ADDRESS_BOUND)
-    );
-
     verify_claim(&claim);
 
     let channel = &mut MC::C::default();

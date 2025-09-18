@@ -1,25 +1,18 @@
 use std::ops::Index;
 
 use cairo_air::components::memory_address_to_id::{
-    Claim, InteractionClaim, MEMORY_ADDRESS_TO_ID_SPLIT, N_ID_AND_MULT_COLUMNS_PER_CHUNK,
-    N_TRACE_COLUMNS,
+    MEMORY_ADDRESS_TO_ID_SPLIT, N_ID_AND_MULT_COLUMNS_PER_CHUNK, N_TRACE_COLUMNS,
 };
-use cairo_air::relations;
 use itertools::{izip, Itertools};
 use num_traits::Zero;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use stwo::core::fields::m31::{BaseField, M31};
-use stwo::core::poly::circle::CanonicCoset;
-use stwo::prover::backend::simd::m31::{PackedBaseField, PackedM31, LOG_N_LANES, N_LANES};
-use stwo::prover::backend::simd::qm31::PackedQM31;
+use stwo::prover::backend::simd::m31::{PackedBaseField, PackedM31, N_LANES};
 use stwo::prover::backend::simd::SimdBackend;
 use stwo::prover::backend::{Col, Column};
-use stwo::prover::poly::circle::CircleEvaluation;
-use stwo::prover::poly::BitReversedOrder;
 use stwo_cairo_adapter::memory::Memory;
-use stwo_constraint_framework::{LogupTraceGenerator, Relation};
 
-use crate::witness::utils::{AtomicMultiplicityColumn, TreeBuilder};
+use crate::witness::utils::AtomicMultiplicityColumn;
 
 pub type InputType = M31;
 pub type PackedInputType = PackedM31;
@@ -116,10 +109,7 @@ impl ClaimGenerator {
         self.multiplicities.increase_at(addr.0 - 1);
     }
 
-    pub fn write_trace(
-        mut self,
-        tree_builder: &mut impl TreeBuilder<SimdBackend>,
-    ) -> (Claim, InteractionClaimGenerator) {
+    pub fn get_memory_address_to_id(mut self) -> InteractionClaimGenerator {
         // Convert multiplicities into packed vectors.
         let multiplicities_packed: Vec<PackedM31> = self.multiplicities.into_simd_vec();
 
@@ -204,25 +194,11 @@ impl ClaimGenerator {
         let multiplicities: [_; MEMORY_ADDRESS_TO_ID_SPLIT] =
             std::array::from_fn(|i| trace[2 + i * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data.clone());
 
-        // Commit on trace.
-        let log_size = size.checked_ilog2().unwrap();
-        let domain = CanonicCoset::new(log_size).circle_domain();
-        let trace = trace
-            .into_iter()
-            .map(|eval| {
-                CircleEvaluation::<SimdBackend, BaseField, BitReversedOrder>::new(domain, eval)
-            })
-            .collect_vec();
-        tree_builder.extend_evals(trace);
-
-        (
-            Claim { log_size },
-            InteractionClaimGenerator {
-                addresses,
-                ids,
-                multiplicities,
-            },
-        )
+        InteractionClaimGenerator {
+            addresses,
+            ids,
+            multiplicities,
+        }
     }
 }
 
@@ -230,45 +206,6 @@ pub struct InteractionClaimGenerator {
     pub addresses: [Vec<PackedM31>; MEMORY_ADDRESS_TO_ID_SPLIT],
     pub ids: [Vec<PackedM31>; MEMORY_ADDRESS_TO_ID_SPLIT],
     pub multiplicities: [Vec<PackedM31>; MEMORY_ADDRESS_TO_ID_SPLIT],
-}
-impl InteractionClaimGenerator {
-    pub fn write_interaction_trace(
-        self,
-        tree_builder: &mut impl TreeBuilder<SimdBackend>,
-        lookup_elements: &relations::MemoryAddressToId,
-    ) -> InteractionClaim {
-        let packed_size = self.ids[0].len();
-        let log_size = packed_size.ilog2() + LOG_N_LANES;
-        let mut logup_gen = LogupTraceGenerator::new(log_size);
-
-        for ((addrs0, ids0, mults0), (addrs1, ids1, mults1)) in
-            izip!(&self.addresses, &self.ids, &self.multiplicities).tuples()
-        {
-            let mut col_gen = logup_gen.new_col();
-            (
-                col_gen.par_iter_mut(),
-                addrs0,
-                addrs1,
-                ids0,
-                ids1,
-                mults0,
-                mults1,
-            )
-                .into_par_iter()
-                .for_each(|(writer, &addr0, &addr1, &id0, &id1, &_mult0, &_mult1)| {
-                    let num = PackedM31::zero();
-                    let p0: PackedQM31 = lookup_elements.combine(&[addr0, id0]);
-                    let p1: PackedQM31 = lookup_elements.combine(&[addr1, id1]);
-                    writer.write_frac(p0 * (-num) + p1 * (-num), p1 * p0);
-                });
-            col_gen.finalize_col();
-        }
-
-        let (trace, claimed_sum) = logup_gen.finalize_last();
-        tree_builder.extend_evals(trace);
-
-        InteractionClaim { claimed_sum }
-    }
 }
 
 #[cfg(test)]

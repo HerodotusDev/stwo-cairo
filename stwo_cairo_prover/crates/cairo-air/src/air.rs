@@ -34,8 +34,8 @@ use super::range_checks_air::{
     RangeChecksInteractionElements,
 };
 use crate::components::{
-    memory_address_to_id, memory_id_to_big, verify_bitwise_xor_4, verify_bitwise_xor_7,
-    verify_bitwise_xor_8, verify_bitwise_xor_9, verify_instruction,
+    memory_id_to_big, verify_bitwise_xor_4, verify_bitwise_xor_7, verify_bitwise_xor_8,
+    verify_bitwise_xor_9, verify_instruction,
 };
 use crate::relations;
 use crate::verifier::RelationUse;
@@ -110,7 +110,6 @@ pub struct CairoClaim {
     pub builtins: BuiltinsClaim,
     pub pedersen_context: PedersenContextClaim,
     pub poseidon_context: PoseidonContextClaim,
-    pub memory_address_to_id: memory_address_to_id::Claim,
     pub memory_id_to_value: memory_id_to_big::Claim,
     pub range_checks: RangeChecksClaim,
     pub verify_bitwise_xor_4: verify_bitwise_xor_4::Claim,
@@ -130,7 +129,6 @@ impl CairoClaim {
             builtins,
             pedersen_context,
             poseidon_context,
-            memory_address_to_id,
             memory_id_to_value,
             range_checks,
             verify_bitwise_xor_4,
@@ -145,7 +143,6 @@ impl CairoClaim {
         builtins.mix_into(channel);
         pedersen_context.mix_into(channel);
         poseidon_context.mix_into(channel);
-        memory_address_to_id.mix_into(channel);
         memory_id_to_value.mix_into(channel);
         range_checks.mix_into(channel);
         verify_bitwise_xor_4.mix_into(channel);
@@ -164,7 +161,6 @@ impl CairoClaim {
             self.builtins.log_sizes(),
             self.pedersen_context.log_sizes(),
             self.poseidon_context.log_sizes(),
-            self.memory_address_to_id.log_sizes(),
             self.memory_id_to_value.log_sizes(),
             self.range_checks.log_sizes(),
             self.verify_bitwise_xor_4.log_sizes(),
@@ -185,7 +181,6 @@ impl CairoClaim {
             builtins,
             pedersen_context,
             poseidon_context,
-            memory_address_to_id: _,
             memory_id_to_value,
             range_checks: _,
             verify_bitwise_xor_4: _,
@@ -196,7 +191,6 @@ impl CairoClaim {
         // NOTE: The following components do not USE relations:
         // - range_checks
         // - verify_bitwise_xor_*
-        // - memory_address_to_id
 
         opcodes.accumulate_relation_uses(relation_uses);
         builtins.accumulate_relation_uses(relation_uses);
@@ -675,7 +669,6 @@ pub struct CairoInteractionClaim {
     pub builtins: BuiltinsInteractionClaim,
     pub pedersen_context: PedersenContextInteractionClaim,
     pub poseidon_context: PoseidonContextInteractionClaim,
-    pub memory_address_to_id: memory_address_to_id::InteractionClaim,
     pub memory_id_to_value: memory_id_to_big::InteractionClaim,
     pub range_checks: RangeChecksInteractionClaim,
     pub verify_bitwise_xor_4: verify_bitwise_xor_4::InteractionClaim,
@@ -691,7 +684,6 @@ impl CairoInteractionClaim {
         self.builtins.mix_into(channel);
         self.pedersen_context.mix_into(channel);
         self.poseidon_context.mix_into(channel);
-        self.memory_address_to_id.mix_into(channel);
         self.memory_id_to_value.mix_into(channel);
         self.range_checks.mix_into(channel);
         self.verify_bitwise_xor_4.mix_into(channel);
@@ -717,7 +709,6 @@ pub fn lookup_sum(
     sum += interaction_claim.builtins.sum();
     sum += interaction_claim.pedersen_context.sum();
     sum += interaction_claim.poseidon_context.sum();
-    sum += interaction_claim.memory_address_to_id.claimed_sum;
     sum += interaction_claim.memory_id_to_value.claimed_sum();
     sum += interaction_claim.range_checks.sum();
     sum += interaction_claim.verify_bitwise_xor_4.claimed_sum;
@@ -735,7 +726,6 @@ pub struct CairoComponents {
     pub builtins: BuiltinComponents,
     pub pedersen_context: PedersenContextComponents,
     pub poseidon_context: PoseidonContextComponents,
-    pub memory_address_to_id: memory_address_to_id::Component,
     pub memory_id_to_value: (
         Vec<memory_id_to_big::BigComponent>,
         memory_id_to_big::SmallComponent,
@@ -806,14 +796,6 @@ impl CairoComponents {
             &cairo_claim.poseidon_context,
             interaction_elements,
             &interaction_claim.poseidon_context,
-        );
-        let memory_address_to_id_component = memory_address_to_id::Component::new(
-            tree_span_provider,
-            memory_address_to_id::Eval::new(
-                cairo_claim.memory_address_to_id.clone(),
-                interaction_elements.memory_address_to_id.clone(),
-            ),
-            interaction_claim.memory_address_to_id.clone().claimed_sum,
         );
 
         let memory_id_to_value_components = memory_id_to_big::big_components_from_claim(
@@ -897,7 +879,6 @@ impl CairoComponents {
             builtins: builtin_components,
             pedersen_context,
             poseidon_context,
-            memory_address_to_id: memory_address_to_id_component,
             memory_id_to_value: (
                 memory_id_to_value_components,
                 small_memory_id_to_value_component,
@@ -918,7 +899,6 @@ impl CairoComponents {
             self.builtins.provers(),
             self.pedersen_context.provers(),
             self.poseidon_context.provers(),
-            [&self.memory_address_to_id as &dyn ComponentProver<SimdBackend>,],
             self.memory_id_to_value
                 .0
                 .iter()
@@ -956,11 +936,6 @@ impl std::fmt::Display for CairoComponents {
         writeln!(f, "Builtins: {}", self.builtins)?;
         writeln!(f, "PedersenContext: {}", self.pedersen_context)?;
         writeln!(f, "PoseidonContext: {}", self.poseidon_context)?;
-        writeln!(
-            f,
-            "MemoryAddressToId: {}",
-            indented_component_display(&self.memory_address_to_id)
-        )?;
         for component in &self.memory_id_to_value.0 {
             writeln!(
                 f,
