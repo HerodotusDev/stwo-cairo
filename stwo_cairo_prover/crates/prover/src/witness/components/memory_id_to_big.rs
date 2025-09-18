@@ -124,13 +124,24 @@ impl ClaimGenerator {
         range_check_9_9_h_trace_generator: &range_check_9_9_h::ClaimGenerator,
         log_max_big_size: u32,
     ) -> (Claim, InteractionClaimGenerator) {
+        // 1) Filter out zero-multiplicity entries up front and generate IDs.
+        let (big_values_filtered, big_mults_packed, big_ids_packed) =
+            filter_big_inputs(self.big_values, self.big_mults.into_simd_vec());
+        let (small_values_filtered, small_mults_packed, small_ids_packed) =
+            filter_small_inputs(self.small_values, self.small_mults.into_simd_vec());
+
+        // 2) Generate traces from filtered inputs.
         let big_table_traces = gen_big_memory_traces(
-            self.big_values,
-            self.big_mults.into_simd_vec(),
+            big_values_filtered,
+            big_mults_packed,
+            big_ids_packed.clone(),
             log_max_big_size,
         );
-        let small_table_trace =
-            gen_small_memory_trace(self.small_values, self.small_mults.into_simd_vec());
+        let small_table_trace = gen_small_memory_trace(
+            small_values_filtered,
+            small_mults_packed,
+            small_ids_packed.clone(),
+        );
 
         // Lookup data.
         let big_components_values: Vec<[_; N_M31_IN_FELT252]> = big_table_traces
@@ -141,9 +152,15 @@ impl ClaimGenerator {
             .iter()
             .map(|trace| trace.last().unwrap().data.clone())
             .collect_vec();
+        let big_ids: Vec<Vec<PackedM31>> = big_table_traces
+            .iter()
+            .map(|trace| trace[N_M31_IN_FELT252].data.clone())
+            .collect_vec();
+
         let small_values: [_; N_M31_IN_SMALL_FELT252] =
             std::array::from_fn(|i| small_table_trace[i].data.clone());
         let small_multiplicities = small_table_trace.last().unwrap().data.clone();
+        let small_ids = small_table_trace[N_M31_IN_SMALL_FELT252].data.clone();
 
         // Add inputs to range check that all the values are 9-bit felts.
         for values in &big_components_values {
@@ -272,11 +289,107 @@ impl ClaimGenerator {
             InteractionClaimGenerator {
                 big_components_values,
                 big_multiplicities,
+                big_ids,
                 small_values,
                 small_multiplicities,
+                small_ids,
             },
         )
     }
+}
+
+// Filters big memory inputs by removing lanes with zero multiplicity, padding to N_LANES, and
+// returns (filtered_values, packed_multiplicities, packed_ids).
+fn filter_big_inputs(
+    values: Vec<[u32; 8]>,
+    mults_simd: Vec<PackedM31>,
+) -> (Vec<[u32; 8]>, Vec<PackedM31>, Vec<PackedM31>) {
+    let mut filtered_values: Vec<[u32; 8]> = Vec::new();
+    let mut mults_flat: Vec<u32> = Vec::new();
+    let mut ids_flat: Vec<u32> = Vec::new();
+
+    for (pack_idx, mult_pack) in mults_simd.iter().enumerate() {
+        let mult_arr = mult_pack.to_array();
+        for lane in 0..N_LANES {
+            let m = mult_arr[lane].0;
+            if m == 0 {
+                continue;
+            }
+            let idx = pack_idx * N_LANES + lane;
+            filtered_values.push(values[idx]);
+            mults_flat.push(m);
+            ids_flat.push(LARGE_MEMORY_VALUE_ID_BASE | (idx as u32));
+        }
+    }
+
+    let rem = filtered_values.len() % N_LANES;
+    if rem != 0 {
+        let pad = N_LANES - rem;
+        filtered_values.extend(std::iter::repeat([0; 8]).take(pad));
+        mults_flat.extend(std::iter::repeat(0).take(pad));
+        ids_flat.extend(std::iter::repeat(0).take(pad));
+    }
+
+    let pack_u32s = |flat: Vec<u32>| -> Vec<PackedM31> {
+        flat.chunks_exact(N_LANES)
+            .map(|chunk| {
+                let arr: [M31; N_LANES] = std::array::from_fn(|i| M31(chunk[i]));
+                PackedM31::from_array(arr)
+            })
+            .collect()
+    };
+
+    let mults_packed = pack_u32s(mults_flat);
+    let ids_packed = pack_u32s(ids_flat);
+
+    (filtered_values, mults_packed, ids_packed)
+}
+
+// Filters small memory inputs by removing lanes with zero multiplicity, padding to N_LANES, and
+// returns (filtered_values, packed_multiplicities, packed_ids).
+fn filter_small_inputs(
+    values: Vec<u128>,
+    mults_simd: Vec<PackedM31>,
+) -> (Vec<u128>, Vec<PackedM31>, Vec<PackedM31>) {
+    let mut filtered_values: Vec<u128> = Vec::new();
+    let mut mults_flat: Vec<u32> = Vec::new();
+    let mut ids_flat: Vec<u32> = Vec::new();
+
+    for (pack_idx, mult_pack) in mults_simd.iter().enumerate() {
+        let mult_arr = mult_pack.to_array();
+        for lane in 0..N_LANES {
+            let m = mult_arr[lane].0;
+            if m == 0 {
+                continue;
+            }
+            let idx = pack_idx * N_LANES + lane;
+            filtered_values.push(values[idx]);
+            mults_flat.push(m);
+            ids_flat.push(idx as u32);
+        }
+    }
+
+    let rem = filtered_values.len() % N_LANES;
+    if rem != 0 {
+        let pad = N_LANES - rem;
+        filtered_values.extend(std::iter::repeat(0).take(pad));
+        mults_flat.extend(std::iter::repeat(0).take(pad));
+        ids_flat.extend(std::iter::repeat(0).take(pad));
+    }
+
+    let pack_u32s = |flat: Vec<u32>| -> Vec<PackedM31> {
+        flat.chunks_exact(N_LANES)
+            .map(|chunk| {
+                let arr: [M31; N_LANES] = std::array::from_fn(|i| M31(chunk[i]));
+                PackedM31::from_array(arr)
+            })
+            .collect()
+    };
+
+    let mults_packed = pack_u32s(mults_flat);
+    let ids_packed = pack_u32s(ids_flat);
+
+    (filtered_values, mults_packed, ids_packed)
 }
 
 /// Generates the trace for the id -> f252 `big` tables. Splits the table to multiple traces
@@ -284,6 +397,7 @@ impl ClaimGenerator {
 fn gen_big_memory_traces(
     values: Vec<[u32; 8]>,
     mults: Vec<PackedM31>,
+    ids: Vec<PackedM31>,
     log_max_big_size: u32,
 ) -> Vec<Vec<BaseColumn>> {
     assert!(log_max_big_size >= LOG_N_LANES);
@@ -291,11 +405,13 @@ fn gen_big_memory_traces(
     assert_eq!(values.len() / N_LANES, mults.len());
     let mut traces = vec![];
 
-    for (values, mults) in values
+    let packs_per_chunk = max_big_size / N_LANES;
+    for ((values, mults), ids) in values
         .chunks(max_big_size)
-        .zip(mults.chunks(max_big_size / N_LANES))
+        .zip(mults.chunks(packs_per_chunk))
+        .zip(ids.chunks(packs_per_chunk))
     {
-        let trace = gen_single_big_memory_trace(values, mults);
+        let trace = gen_single_big_memory_trace(values, mults, ids);
         traces.push(trace);
     }
 
@@ -303,13 +419,21 @@ fn gen_big_memory_traces(
 }
 
 // Generates the trace of the large value memory table.
-fn gen_single_big_memory_trace(values: &[[u32; 8]], mults: &[PackedM31]) -> Vec<BaseColumn> {
+fn gen_single_big_memory_trace(
+    values: &[[u32; 8]],
+    mults: &[PackedM31],
+    ids: &[PackedM31],
+) -> Vec<BaseColumn> {
     assert_eq!(values.len(), mults.len() * N_LANES);
     let column_length = values.len().next_power_of_two();
 
     let mut mults = mults.to_vec();
     mults.resize(column_length / N_LANES, PackedM31::zero());
     let multiplicities = BaseColumn::from_simd(mults);
+    // IDs column
+    let mut ids_vec = ids.to_vec();
+    ids_vec.resize(column_length / N_LANES, PackedM31::zero());
+    let ids_col = BaseColumn::from_simd(ids_vec);
 
     let packed_values = values
         .iter()
@@ -332,16 +456,22 @@ fn gen_single_big_memory_trace(values: &[[u32; 8]], mults: &[PackedM31]) -> Vec<
         }
     }
 
-    chain!(value_trace, [multiplicities]).collect_vec()
+    chain!(value_trace, [ids_col, multiplicities]).collect_vec()
 }
 
 // Generates the trace of the small value memory table.
-fn gen_small_memory_trace(values: Vec<u128>, mut mults: Vec<PackedM31>) -> Vec<BaseColumn> {
+fn gen_small_memory_trace(
+    values: Vec<u128>,
+    mut mults: Vec<PackedM31>,
+    mut ids: Vec<PackedM31>,
+) -> Vec<BaseColumn> {
     assert_eq!(values.len(), mults.len() * N_LANES);
     let column_length = values.len().next_power_of_two();
 
     mults.resize(column_length / N_LANES, PackedM31::zero());
     let multiplicities = BaseColumn::from_simd(mults);
+    ids.resize(column_length / N_LANES, PackedM31::zero());
+    let ids_col = BaseColumn::from_simd(ids);
 
     let packed_values: Vec<[Simd<u32, N_LANES>; 4]> = values
         .into_iter()
@@ -374,15 +504,17 @@ fn gen_small_memory_trace(values: Vec<u128>, mut mults: Vec<PackedM31>) -> Vec<B
         }
     }
 
-    chain!(values_trace, [multiplicities]).collect_vec()
+    chain!(values_trace, [ids_col, multiplicities]).collect_vec()
 }
 
 #[derive(Debug)]
 pub struct InteractionClaimGenerator {
     pub big_components_values: Vec<[Vec<PackedM31>; N_M31_IN_FELT252]>,
     pub big_multiplicities: Vec<Vec<PackedM31>>,
+    pub big_ids: Vec<Vec<PackedM31>>,
     pub small_values: [Vec<PackedM31>; N_M31_IN_SMALL_FELT252],
     pub small_multiplicities: Vec<PackedM31>,
+    pub small_ids: Vec<PackedM31>,
 }
 impl InteractionClaimGenerator {
     pub fn write_interaction_trace(
@@ -398,16 +530,16 @@ impl InteractionClaimGenerator {
         range9_9_g_lookup_elements: &relations::RangeCheck_9_9_G,
         range9_9_h_lookup_elements: &relations::RangeCheck_9_9_H,
     ) -> InteractionClaim {
-        let mut offset = 0;
         let (big_traces, big_claimed_sums): (Vec<_>, Vec<_>) = self
             .big_components_values
             .iter()
             .zip(self.big_multiplicities.iter())
-            .map(|(big_components_values, big_multiplicities)| {
+            .zip(self.big_ids.iter())
+            .map(|((big_components_values, big_multiplicities), big_ids)| {
                 let res = Self::gen_big_memory_interaction_trace(
                     big_components_values,
                     big_multiplicities,
-                    offset,
+                    big_ids,
                     lookup_elements,
                     range9_9_lookup_elements,
                     range9_9_b_lookup_elements,
@@ -418,7 +550,6 @@ impl InteractionClaimGenerator {
                     range9_9_g_lookup_elements,
                     range9_9_h_lookup_elements,
                 );
-                offset += big_multiplicities.len() as u32 * N_LANES as u32;
                 res
             })
             .unzip();
@@ -444,7 +575,7 @@ impl InteractionClaimGenerator {
     fn gen_big_memory_interaction_trace(
         big_components_values: &[Vec<PackedM31>; N_M31_IN_FELT252],
         big_multiplicities: &[PackedM31],
-        offset: u32,
+        big_ids: &[PackedM31],
         lookup_elements: &relations::MemoryIdToBig,
         range9_9_lookup_elements: &relations::RangeCheck_9_9,
         range9_9_b_lookup_elements: &relations::RangeCheck_9_9_B,
@@ -498,17 +629,11 @@ impl InteractionClaimGenerator {
 
         // Yield large values.
         let mut col_gen = big_values_logup_gen.new_col();
-        let large_memory_value_id_tag = Simd::splat(LARGE_MEMORY_VALUE_ID_BASE);
         #[allow(clippy::needless_range_loop)]
         for vec_row in 0..1 << (big_table_log_size - LOG_N_LANES) {
             let id_and_value: [_; N_M31_IN_FELT252 + MEMORY_ID_SIZE] = std::array::from_fn(|i| {
                 if i == 0 {
-                    unsafe {
-                        PackedM31::from_simd_unchecked(
-                            (SIMD_ENUMERATION_0 + Simd::splat((vec_row * N_LANES) as u32 + offset))
-                                | large_memory_value_id_tag,
-                        )
-                    }
+                    big_ids[vec_row]
                 } else {
                     big_components_values[i - 1][vec_row]
                 }
@@ -565,11 +690,7 @@ impl InteractionClaimGenerator {
             let id_and_value: [_; N_M31_IN_SMALL_FELT252 + MEMORY_ID_SIZE] =
                 std::array::from_fn(|i| {
                     if i == 0 {
-                        unsafe {
-                            PackedM31::from_simd_unchecked(
-                                SIMD_ENUMERATION_0 + Simd::splat((vec_row * N_LANES) as u32),
-                            )
-                        }
+                        self.small_ids[vec_row]
                     } else {
                         self.small_values[i - 1][vec_row]
                     }
