@@ -57,7 +57,6 @@ fn assert_cairo_components(trace: TreeVec<Vec<&Vec<M31>>>, cairo_components: &Ca
         builtins,
         pedersen_context,
         poseidon_context,
-        memory_id_to_value,
         range_checks,
         verify_bitwise_xor_4,
         verify_bitwise_xor_7,
@@ -172,10 +171,6 @@ fn assert_cairo_components(trace: TreeVec<Vec<&Vec<M31>>>, cairo_components: &Ca
     assert_component(verify_bitwise_xor_7, &trace);
     assert_component(verify_bitwise_xor_8, &trace);
     assert_component(verify_bitwise_xor_9, &trace);
-    for component in &memory_id_to_value.0 {
-        assert_component(component, &trace);
-    }
-    assert_component(&memory_id_to_value.1, &trace);
 
     if let Some(cairo_air::blake::air::Components {
         blake_round,

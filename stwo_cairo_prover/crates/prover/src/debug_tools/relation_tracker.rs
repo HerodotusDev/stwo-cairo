@@ -125,7 +125,6 @@ fn cairo_relation_entries(
         verify_instruction,
         blake_context,
         builtins,
-        memory_id_to_value,
         range_checks,
         verify_bitwise_xor_4,
         verify_bitwise_xor_7,
@@ -244,8 +243,6 @@ fn cairo_relation_entries(
         add_to_relation_entries(verify_bitwise_xor_7, trace),
         add_to_relation_entries(verify_bitwise_xor_8, trace),
         add_to_relation_entries(verify_bitwise_xor_9, trace),
-        add_to_relation_entries_many(&memory_id_to_value.0, trace),
-        add_to_relation_entries(&memory_id_to_value.1, trace),
     )
     .collect_vec();
 

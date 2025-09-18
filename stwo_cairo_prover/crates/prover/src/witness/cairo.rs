@@ -381,19 +381,9 @@ impl CairoClaimGenerator {
 
         // Memory uses "Sequence", split it according to `MAX_SEQUENCE_LOG_SIZE`.
         const LOG_MAX_BIG_SIZE: u32 = cairo_air::preprocessed::MAX_SEQUENCE_LOG_SIZE;
-        let (memory_id_to_value_claim, memory_id_to_value_interaction_gen) =
-            self.memory_id_to_value_trace_generator.write_trace(
-                tree_builder,
-                &self.range_checks_trace_generator.rc_9_9_trace_generator,
-                &self.range_checks_trace_generator.rc_9_9_b_trace_generator,
-                &self.range_checks_trace_generator.rc_9_9_c_trace_generator,
-                &self.range_checks_trace_generator.rc_9_9_d_trace_generator,
-                &self.range_checks_trace_generator.rc_9_9_e_trace_generator,
-                &self.range_checks_trace_generator.rc_9_9_f_trace_generator,
-                &self.range_checks_trace_generator.rc_9_9_g_trace_generator,
-                &self.range_checks_trace_generator.rc_9_9_h_trace_generator,
-                LOG_MAX_BIG_SIZE,
-            );
+        let memory_id_to_value_interaction_gen = self
+            .memory_id_to_value_trace_generator
+            .write_trace(LOG_MAX_BIG_SIZE);
         let (range_checks_claim, range_checks_interaction_gen) =
             self.range_checks_trace_generator.write_trace(tree_builder);
         let (verify_bitwise_xor_4_claim, verify_bitwise_xor_4_interaction_gen) = self
@@ -424,7 +414,6 @@ impl CairoClaimGenerator {
                 builtins: builtins_claim,
                 pedersen_context: pedersen_context_claim,
                 poseidon_context: poseidon_context_claim,
-                memory_id_to_value: memory_id_to_value_claim,
                 range_checks: range_checks_claim,
                 verify_bitwise_xor_4: verify_bitwise_xor_4_claim,
                 verify_bitwise_xor_7: verify_bitwise_xor_7_claim,
@@ -438,7 +427,6 @@ impl CairoClaimGenerator {
                 builtins_interaction_gen,
                 pedersen_context_interaction_gen,
                 poseidon_context_interaction_gen,
-                memory_id_to_value_interaction_gen,
                 range_checks_interaction_gen,
                 verify_bitwise_xor_4_interaction_gen,
                 verify_bitwise_xor_7_interaction_gen,
@@ -456,7 +444,6 @@ pub struct CairoInteractionClaimGenerator {
     builtins_interaction_gen: BuiltinsInteractionClaimGenerator,
     pedersen_context_interaction_gen: PedersenContextInteractionClaimGenerator,
     poseidon_context_interaction_gen: PoseidonContextInteractionClaimGenerator,
-    memory_id_to_value_interaction_gen: memory_id_to_big::InteractionClaimGenerator,
     range_checks_interaction_gen: RangeChecksInteractionClaimGenerator,
     verify_bitwise_xor_4_interaction_gen: verify_bitwise_xor_4::InteractionClaimGenerator,
     verify_bitwise_xor_7_interaction_gen: verify_bitwise_xor_7::InteractionClaimGenerator,
@@ -495,20 +482,6 @@ impl CairoInteractionClaimGenerator {
         let poseidon_context_interaction_claim = self
             .poseidon_context_interaction_gen
             .write_interaction_trace(tree_builder, interaction_elements);
-        let memory_id_to_value_interaction_claim = self
-            .memory_id_to_value_interaction_gen
-            .write_interaction_trace(
-                tree_builder,
-                &interaction_elements.memory_id_to_value,
-                &interaction_elements.range_checks.rc_9_9,
-                &interaction_elements.range_checks.rc_9_9_b,
-                &interaction_elements.range_checks.rc_9_9_c,
-                &interaction_elements.range_checks.rc_9_9_d,
-                &interaction_elements.range_checks.rc_9_9_e,
-                &interaction_elements.range_checks.rc_9_9_f,
-                &interaction_elements.range_checks.rc_9_9_g,
-                &interaction_elements.range_checks.rc_9_9_h,
-            );
 
         let range_checks_interaction_claim = self
             .range_checks_interaction_gen
@@ -533,7 +506,6 @@ impl CairoInteractionClaimGenerator {
             builtins: builtins_interaction_claims,
             pedersen_context: pedersen_context_interaction_claim,
             poseidon_context: poseidon_context_interaction_claim,
-            memory_id_to_value: memory_id_to_value_interaction_claim,
             range_checks: range_checks_interaction_claim,
             verify_bitwise_xor_4: verify_bitwise_xor_4_interaction_claim,
             verify_bitwise_xor_7: verify_bitwise_xor_7_interaction_claim,
