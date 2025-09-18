@@ -1,3 +1,4 @@
+use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use stwo::core::channel::Channel;
 use stwo::core::fields::qm31::{SecureField, SECURE_EXTENSION_DEGREE};
@@ -55,10 +56,11 @@ impl FrameworkEval for Eval {
         for _ in 0..MEMORY_ADDRESS_TO_ID_SPLIT {
             let address = eval.next_trace_mask();
             let id = eval.next_trace_mask();
-            let multiplicity = eval.next_trace_mask();
+            let _multiplicity = eval.next_trace_mask();
+            let num = E::F::zero();
             eval.add_to_relation(RelationEntry::new(
                 &self.lookup_elements,
-                E::EF::from(-multiplicity),
+                E::EF::from(-num),
                 &[address, id],
             ));
         }

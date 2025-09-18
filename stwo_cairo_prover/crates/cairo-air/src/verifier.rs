@@ -38,6 +38,7 @@ fn verify_claim(claim: &CairoClaim) {
         final_state,
         overall_final_state,
         overall_initial_state,
+        ..
     } = &claim.public_data;
 
     verify_builtins(&claim.builtins, public_segments);

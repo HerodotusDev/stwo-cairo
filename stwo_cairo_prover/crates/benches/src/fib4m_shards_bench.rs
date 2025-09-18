@@ -33,41 +33,68 @@ fn main() {
 
     // Prove+verify each shard sequentially (streaming-style).
     let t_all = Instant::now();
-    let mut results: Vec<(usize, Duration)> = Vec::new();
+    let mut prove_durs: Vec<Duration> = Vec::new();
+    let mut verify_durs: Vec<Duration> = Vec::new();
+    let mut combined_durs: Vec<Duration> = Vec::new();
     for (i, shard) in shards.into_iter().enumerate() {
-        let t = Instant::now();
         info!(
             "Proving shard {} (initial_pc={}, final_pc={})",
             i + 1,
             shard.state_transitions.initial_state.pc.0,
             shard.state_transitions.final_state.pc.0
         );
+        let t_prove = Instant::now();
         let proof = prove_cairo::<Blake2sMerkleChannel>(
             shard,
             PcsConfig::default(),
             preprocessed_trace,
         )
         .expect("prove_cairo failed");
+        let prove_dur = t_prove.elapsed();
+        info!("Proved shard {} in {:.3?}", i + 1, prove_dur);
+
+        let t_verify = Instant::now();
         verify_cairo::<Blake2sMerkleChannel>(proof, preprocessed_trace)
             .expect("verify_cairo failed");
-        let dur = t.elapsed();
-        info!("Verified shard {} in {:.3?}", i + 1, dur);
-        results.push((i, dur));
+        let verify_dur = t_verify.elapsed();
+        info!("Verified shard {} in {:.3?}", i + 1, verify_dur);
+
+        prove_durs.push(prove_dur);
+        verify_durs.push(verify_dur);
+        combined_durs.push(prove_dur + verify_dur);
     }
     let total_dur = t_all.elapsed();
 
     // Summarize.
-    let n = results.len();
-    let mut durs: Vec<Duration> = results.into_iter().map(|(_, d)| d).collect();
+    let n = combined_durs.len();
+
+    // Combined stats (prove + verify)
+    let mut durs = combined_durs.clone();
     durs.sort();
-    let sum = durs.iter().fold(Duration::ZERO, |acc, d| acc + *d);
-    let avg = sum / (n as u32);
-    let p50 = durs[n / 2];
-    let p95 = durs[((n as f32 * 0.95).floor() as usize).min(n - 1)];
-    let max = *durs.last().unwrap();
+    let sum_combined = durs.iter().fold(Duration::ZERO, |acc, d| acc + *d);
+    let avg_combined = sum_combined / (n as u32);
+    let p50_combined = durs[n / 2];
+    let p95_combined = durs[((n as f32 * 0.95).floor() as usize).min(n - 1)];
+    let max_combined = *durs.last().unwrap();
+
+    // Separate totals and avgs
+    let total_prove: Duration = prove_durs.iter().copied().sum();
+    let total_verify: Duration = verify_durs.iter().copied().sum();
+    let avg_prove = total_prove / (n as u32);
+    let avg_verify = total_verify / (n as u32);
 
     println!(
-        "Shards: {} | load: {:.3?} | total: {:.3?} | avg: {:.3?} | p50: {:.3?} | p95: {:.3?} | max: {:.3?}",
-        n, load_dur, total_dur, avg, p50, p95, max
+        "Shards: {} | load: {:.3?} | total: {:.3?} | prove_total: {:.3?} | verify_total: {:.3?} | avg_prove: {:.3?} | avg_verify: {:.3?} | combined avg: {:.3?} | p50: {:.3?} | p95: {:.3?} | max: {:.3?}",
+        n,
+        load_dur,
+        total_dur,
+        total_prove,
+        total_verify,
+        avg_prove,
+        avg_verify,
+        avg_combined,
+        p50_combined,
+        p95_combined,
+        max_combined
     );
 }

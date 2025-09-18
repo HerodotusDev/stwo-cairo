@@ -12,6 +12,7 @@ use stwo::core::vcs::MerkleHasher;
 use stwo::prover::backend::simd::SimdBackend;
 use stwo::prover::ComponentProver;
 use stwo_cairo_adapter::HashMap;
+use stwo_cairo_common::memory::N_M31_IN_FELT252;
 use stwo_cairo_common::prover_types::cpu::CasmState;
 use stwo_cairo_common::prover_types::felt::split_f252;
 use stwo_cairo_serialize::{CairoDeserialize, CairoSerialize};
@@ -235,12 +236,15 @@ pub struct PublicData {
     pub overall_initial_state: Option<CasmState>,
     #[serde(default)]
     pub overall_final_state: Option<CasmState>,
+    // Yielded private memory entries
+    #[serde(default)]
+    pub private_memory: PrivateMemory,
 }
 impl PublicData {
     /// Sums the logup of the public data.
     pub fn logup_sum(&self, lookup_elements: &CairoInteractionElements) -> QM31 {
         let mut values_to_inverse = vec![];
-        // Use public memory in the memory relations.
+        // Use public memory in the memory relations as-is (no multiplicities).
         let overall_initial_state = self.overall_initial_state.unwrap_or(self.initial_state);
         let overall_final_state = self.overall_final_state.unwrap_or(self.final_state);
         self.public_memory
@@ -265,6 +269,29 @@ impl PublicData {
                     .concat(),
                 ));
             });
+        // Yield private memory (address->id and id->value) with multiplicities.
+        for &(addr, id, mult) in &self.private_memory.address_to_id {
+            let denom = <relations::MemoryAddressToId as Relation<M31, QM31>>::combine(
+                &lookup_elements.memory_address_to_id,
+                &[M31::from_u32_unchecked(addr), M31::from_u32_unchecked(id)],
+            );
+            let num_inv = (-M31::from_u32_unchecked(mult)).inverse();
+            values_to_inverse.push(denom * num_inv);
+        }
+        for &(id, val, mult) in &self.private_memory.id_to_value {
+            let value_m31: [M31; N_M31_IN_FELT252] =
+                std::array::from_fn(|i| M31::from_u32_unchecked(val[i]));
+            let denom = <relations::MemoryIdToBig as Relation<M31, QM31>>::combine(
+                &lookup_elements.memory_id_to_value,
+                &[
+                    [M31::from_u32_unchecked(id)].as_slice(),
+                    value_m31.as_slice(),
+                ]
+                .concat(),
+            );
+            let num_inv = (-M31::from_u32_unchecked(mult)).inverse();
+            values_to_inverse.push(denom * num_inv);
+        }
 
         // Yield initial state and use the final.
         values_to_inverse.push(<relations::Opcodes as Relation<M31, QM31>>::combine(
@@ -290,6 +317,18 @@ impl PublicData {
         public_memory.mix_into(channel);
         initial_state.mix_into(channel);
         final_state.mix_into(channel);
+    }
+
+    /// Replaces the private memory with the provided data.
+    pub fn update_private_memory<I1, I2>(&mut self, address_to_id: I1, id_to_value: I2)
+    where
+        I1: IntoIterator<Item = (u32, u32, u32)>,
+        I2: IntoIterator<Item = (u32, [u32; N_M31_IN_FELT252], u32)>,
+    {
+        self.private_memory = PrivateMemory {
+            address_to_id: address_to_id.into_iter().collect(),
+            id_to_value: id_to_value.into_iter().collect(),
+        };
     }
 }
 
@@ -567,6 +606,14 @@ impl PublicMemory {
             channel.mix_u64(*id as u64);
         }
     }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
+pub struct PrivateMemory {
+    // Triples of (address, id, multiplicity) for the memory address->id relation.
+    pub address_to_id: Vec<(u32, u32, u32)>,
+    // Triples of (id, value, multiplicity) where value is the 28-limb M31 representation of Felt252.
+    pub id_to_value: Vec<(u32, [u32; N_M31_IN_FELT252], u32)>,
 }
 
 pub struct CairoInteractionElements {

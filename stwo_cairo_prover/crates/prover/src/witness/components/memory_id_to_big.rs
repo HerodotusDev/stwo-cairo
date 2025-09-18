@@ -638,7 +638,8 @@ impl InteractionClaimGenerator {
                 }
             });
             let denom: PackedQM31 = lookup_elements.combine(&id_and_value);
-            col_gen.write_frac(vec_row, (-big_multiplicities[vec_row]).into(), denom);
+            let num = PackedM31::zero();
+            col_gen.write_frac(vec_row, (-num).into(), denom);
         }
         col_gen.finalize_col();
 
@@ -695,7 +696,8 @@ impl InteractionClaimGenerator {
                     }
                 });
             let denom: PackedQM31 = lookup_elements.combine(&id_and_value);
-            col_gen.write_frac(vec_row, (-self.small_multiplicities[vec_row]).into(), denom);
+            let num = PackedM31::zero();
+            col_gen.write_frac(vec_row, (-num).into(), denom);
         }
         col_gen.finalize_col();
 

@@ -146,7 +146,7 @@ impl ClaimGenerator {
                     continue;
                 }
                 addr_buf[buf_count] = M31(global_idx as u32 + 1); // addresses are offset by 1.
-                // AddressToId expects 1-based address in its Index impl.
+                                                                  // AddressToId expects 1-based address in its Index impl.
                 ids_buf[buf_count] = M31(self.address_to_raw_id[global_idx + 1]);
                 mult_buf[buf_count] = M31(m);
                 buf_count += 1;
@@ -255,10 +255,11 @@ impl InteractionClaimGenerator {
                 mults1,
             )
                 .into_par_iter()
-                .for_each(|(writer, &addr0, &addr1, &id0, &id1, &mult0, &mult1)| {
+                .for_each(|(writer, &addr0, &addr1, &id0, &id1, &_mult0, &_mult1)| {
+                    let num = PackedM31::zero();
                     let p0: PackedQM31 = lookup_elements.combine(&[addr0, id0]);
                     let p1: PackedQM31 = lookup_elements.combine(&[addr1, id1]);
-                    writer.write_frac(p0 * (-mult1) + p1 * (-mult0), p1 * p0);
+                    writer.write_frac(p0 * (-num) + p1 * (-num), p1 * p0);
                 });
             col_gen.finalize_col();
         }

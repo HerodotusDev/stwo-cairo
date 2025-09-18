@@ -1,5 +1,5 @@
 use itertools::{chain, Itertools};
-use num_traits::One;
+use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 use stwo::core::channel::Channel;
 use stwo::core::fields::qm31::{SecureField, SECURE_EXTENSION_DEGREE};
@@ -140,7 +140,8 @@ impl FrameworkEval for BigEval {
     fn evaluate<E: EvalAtRow>(&self, mut eval: E) -> E {
         let value: [E::F; N_M31_IN_FELT252] = std::array::from_fn(|_| eval.next_trace_mask());
         let id = eval.next_trace_mask();
-        let multiplicity = eval.next_trace_mask();
+        let _multiplicity = eval.next_trace_mask();
+        let num = E::F::zero();
 
         // Range check limbs.
         for (i, (l, r)) in value.iter().tuples().enumerate() {
@@ -195,7 +196,7 @@ impl FrameworkEval for BigEval {
         // Yield the value.
         eval.add_to_relation(RelationEntry::new(
             &self.lookup_elements,
-            E::EF::from(-multiplicity),
+            E::EF::from(-num),
             &chain!([id], value).collect_vec(),
         ));
 
@@ -285,7 +286,8 @@ impl FrameworkEval for SmallEval {
     fn evaluate<E: EvalAtRow>(&self, mut eval: E) -> E {
         let value: [E::F; N_M31_IN_SMALL_FELT252] = std::array::from_fn(|_| eval.next_trace_mask());
         let id = eval.next_trace_mask();
-        let multiplicity = eval.next_trace_mask();
+        let _multiplicity = eval.next_trace_mask();
+        let num = E::F::zero();
 
         // Range check limbs.
         for (i, (l, r)) in value.iter().tuples().enumerate() {
@@ -320,7 +322,7 @@ impl FrameworkEval for SmallEval {
         // Yield the value.
         eval.add_to_relation(RelationEntry::new(
             &self.lookup_elements,
-            E::EF::from(-multiplicity),
+            E::EF::from(-num),
             &chain!([id], value).collect_vec(),
         ));
 

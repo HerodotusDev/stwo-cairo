@@ -1,14 +1,15 @@
 use std::array;
 
 use cairo_air::air::{
-    CairoClaim, CairoInteractionClaim, CairoInteractionElements, MemorySmallValue, PublicData,
-    PublicMemory, PublicSegmentRanges, SegmentRange,
+    CairoClaim, CairoInteractionClaim, CairoInteractionElements, MemorySmallValue, PrivateMemory,
+    PublicData, PublicMemory, PublicSegmentRanges, SegmentRange,
 };
 use itertools::Itertools;
 use stwo::core::fields::m31::M31;
 use stwo::prover::backend::simd::SimdBackend;
 use stwo_cairo_adapter::memory::Memory;
 use stwo_cairo_adapter::{ProverInput, PublicSegmentContext};
+use stwo_cairo_common::memory::{N_M31_IN_FELT252, N_M31_IN_SMALL_FELT252};
 use tracing::{span, Level};
 
 use super::blake_context::{BlakeContextClaimGenerator, BlakeContextInteractionClaimGenerator};
@@ -115,6 +116,96 @@ fn extract_sections_from_memory(
     }
 }
 
+/// Extracts the address->id and id->value pairs from the interaction generators
+/// into a PrivateMemory structure, filtering out zero-multiplicity rows.
+fn extract_private_memory(
+    memory_address_to_id_interaction_gen: &memory_address_to_id::InteractionClaimGenerator,
+    memory_id_to_value_interaction_gen: &memory_id_to_big::InteractionClaimGenerator,
+) -> PrivateMemory {
+    // Collect (address, id) pairs from memory_address_to_id_interaction_gen.
+    let mut address_to_id: Vec<(u32, u32, u32)> = Vec::new();
+    for ((addrs, ids), mults) in memory_address_to_id_interaction_gen
+        .addresses
+        .iter()
+        .zip(memory_address_to_id_interaction_gen.ids.iter())
+        .zip(memory_address_to_id_interaction_gen.multiplicities.iter())
+    {
+        for ((addr_pack, id_pack), mult_pack) in addrs.iter().zip(ids.iter()).zip(mults) {
+            let addr_arr = addr_pack.to_array();
+            let id_arr = id_pack.to_array();
+            let mult_arr = mult_pack.to_array();
+            for lane in 0..addr_arr.len() {
+                let m = mult_arr[lane].0;
+                if m != 0 {
+                    address_to_id.push((addr_arr[lane].0, id_arr[lane].0, m));
+                }
+            }
+        }
+    }
+
+    // Collect (id, value[28]) pairs from memory_id_to_value_interaction_gen.
+    let mut id_to_value: Vec<(u32, [u32; N_M31_IN_FELT252], u32)> = Vec::new();
+
+    // Big values (28 limbs).
+    for ((component_values, component_mults), component_ids) in memory_id_to_value_interaction_gen
+        .big_components_values
+        .iter()
+        .zip(memory_id_to_value_interaction_gen.big_multiplicities.iter())
+        .zip(memory_id_to_value_interaction_gen.big_ids.iter())
+    {
+        debug_assert!(component_values
+            .iter()
+            .all(|v| v.len() == component_ids.len()));
+        debug_assert!(component_mults.len() == component_ids.len());
+        for pack_idx in 0..component_ids.len() {
+            let id_arr = component_ids[pack_idx].to_array();
+            let mult_arr = component_mults[pack_idx].to_array();
+            for lane in 0..id_arr.len() {
+                let m = mult_arr[lane].0;
+                if m == 0 {
+                    continue;
+                }
+                let mut limbs = [0u32; N_M31_IN_FELT252];
+                for limb_idx in 0..N_M31_IN_FELT252 {
+                    let limb_arr = component_values[limb_idx][pack_idx].to_array();
+                    limbs[limb_idx] = limb_arr[lane].0;
+                }
+                id_to_value.push((id_arr[lane].0, limbs, m));
+            }
+        }
+    }
+
+    // Small values (8 limbs), pad with zeros to 28.
+    let small_values = &memory_id_to_value_interaction_gen.small_values;
+    let small_ids = &memory_id_to_value_interaction_gen.small_ids;
+    let small_mults = &memory_id_to_value_interaction_gen.small_multiplicities;
+    debug_assert!(small_ids.len() == small_mults.len());
+    for pack_idx in 0..small_ids.len() {
+        let id_arr = small_ids[pack_idx].to_array();
+        let mult_arr = small_mults[pack_idx].to_array();
+        // Precompute the small limb arrays for this pack index to avoid repeated to_array.
+        let small_limb_arrays: [[M31; 16]; N_M31_IN_SMALL_FELT252] =
+            std::array::from_fn(|i| small_values[i][pack_idx].to_array());
+        for lane in 0..id_arr.len() {
+            let m = mult_arr[lane].0;
+            if m == 0 {
+                continue;
+            }
+            let mut limbs = [0u32; N_M31_IN_FELT252];
+            for limb_idx in 0..N_M31_IN_SMALL_FELT252 {
+                limbs[limb_idx] = small_limb_arrays[limb_idx][lane].0;
+            }
+            // Remaining limbs already zero.
+            id_to_value.push((id_arr[lane].0, limbs, m));
+        }
+    }
+
+    PrivateMemory {
+        address_to_id,
+        id_to_value,
+    }
+}
+
 /// Responsible for generating the CairoClaim and writing the trace.
 /// NOTE: Order of writing the trace is important, and should be consistent with [`CairoClaim`],
 /// [`CairoInteractionClaim`], [`CairoComponents`], [`CairoInteractionElements`].
@@ -200,6 +291,7 @@ impl CairoClaimGenerator {
             final_state,
             overall_initial_state: overall_initial_state_opt,
             overall_final_state: overall_final_state_opt,
+            private_memory: Default::default(),
         };
 
         let blake_context_trace_generator = BlakeContextClaimGenerator::new(memory);
@@ -316,6 +408,14 @@ impl CairoClaimGenerator {
         let (verify_bitwise_xor_9_claim, verify_bitwise_xor_9_interaction_gen) = self
             .verify_bitwise_xor_9_trace_generator
             .write_trace(tree_builder);
+
+        // Update PublicData's private memory using a dedicated extractor.
+        let private_memory = extract_private_memory(
+            &memory_address_to_id_interaction_gen,
+            &memory_id_to_value_interaction_gen,
+        );
+        self.public_data.private_memory = private_memory;
+
         span.exit();
         (
             CairoClaim {

@@ -84,6 +84,24 @@ where
                 .concat(),
             });
         });
+    // Private memory (with multiplicities).
+    for &(addr, id, mult) in &public_data.private_memory.address_to_id {
+        entries.push(RelationTrackerEntry {
+            relation: "MemoryAddressToId".to_string(),
+            mult: -M31::from_u32_unchecked(mult),
+            values: vec![M31::from_u32_unchecked(addr), M31::from_u32_unchecked(id)],
+        });
+    }
+    for &(id, val, mult) in &public_data.private_memory.id_to_value {
+        let mut values = Vec::with_capacity(1 + val.len());
+        values.push(M31::from_u32_unchecked(id));
+        values.extend(val.into_iter().map(M31::from_u32_unchecked));
+        entries.push(RelationTrackerEntry {
+            relation: "MemoryIdToBig".to_string(),
+            mult: -M31::from_u32_unchecked(mult),
+            values,
+        });
+    }
     entries.push(RelationTrackerEntry {
         relation: "Opcodes".to_string(),
         mult: M31::one(),
