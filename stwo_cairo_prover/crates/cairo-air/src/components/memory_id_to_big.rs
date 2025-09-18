@@ -2,10 +2,8 @@ use itertools::{chain, Itertools};
 use num_traits::One;
 use serde::{Deserialize, Serialize};
 use stwo::core::channel::Channel;
-use stwo::core::fields::m31::M31;
 use stwo::core::fields::qm31::{SecureField, SECURE_EXTENSION_DEGREE};
 use stwo::core::pcs::TreeVec;
-use stwo_cairo_adapter::memory::LARGE_MEMORY_VALUE_ID_BASE;
 use stwo_cairo_common::memory::{N_M31_IN_FELT252, N_M31_IN_SMALL_FELT252};
 use stwo_cairo_common::preprocessed_columns::preprocessed_trace::{PreProcessedColumn, Seq};
 use stwo_cairo_serialize::{CairoDeserialize, CairoSerialize};
@@ -19,8 +17,8 @@ use crate::relations;
 // TODO(AlonH): Make memory size configurable.
 pub const MEMORY_ID_SIZE: usize = 1;
 pub const N_MULTIPLICITY_COLUMNS: usize = 1;
-pub const BIG_N_COLUMNS: usize = N_M31_IN_FELT252 + N_MULTIPLICITY_COLUMNS;
-pub const SMALL_N_COLUMNS: usize = N_M31_IN_SMALL_FELT252 + N_MULTIPLICITY_COLUMNS;
+pub const BIG_N_COLUMNS: usize = N_M31_IN_FELT252 + MEMORY_ID_SIZE + N_MULTIPLICITY_COLUMNS;
+pub const SMALL_N_COLUMNS: usize = N_M31_IN_SMALL_FELT252 + MEMORY_ID_SIZE + N_MULTIPLICITY_COLUMNS;
 
 pub type BigComponent = FrameworkComponent<BigEval>;
 pub type SmallComponent = FrameworkComponent<SmallEval>;
@@ -141,8 +139,8 @@ impl FrameworkEval for BigEval {
     }
 
     fn evaluate<E: EvalAtRow>(&self, mut eval: E) -> E {
-        let seq = eval.get_preprocessed_column(Seq::new(self.log_size()).id());
         let value: [E::F; N_M31_IN_FELT252] = std::array::from_fn(|_| eval.next_trace_mask());
+        let id = eval.next_trace_mask();
         let multiplicity = eval.next_trace_mask();
 
         // Range check limbs.
@@ -196,9 +194,6 @@ impl FrameworkEval for BigEval {
         }
 
         // Yield the value.
-        let id = seq
-            + E::F::from(M31::from(LARGE_MEMORY_VALUE_ID_BASE))
-            + E::F::from(M31::from(self.offset));
         eval.add_to_relation(RelationEntry::new(
             &self.lookup_elements,
             E::EF::from(-multiplicity),
@@ -289,8 +284,8 @@ impl FrameworkEval for SmallEval {
     }
 
     fn evaluate<E: EvalAtRow>(&self, mut eval: E) -> E {
-        let seq = eval.get_preprocessed_column(Seq::new(self.log_size()).id());
         let value: [E::F; N_M31_IN_SMALL_FELT252] = std::array::from_fn(|_| eval.next_trace_mask());
+        let id = eval.next_trace_mask();
         let multiplicity = eval.next_trace_mask();
 
         // Range check limbs.
@@ -324,7 +319,6 @@ impl FrameworkEval for SmallEval {
         }
 
         // Yield the value.
-        let id = seq;
         eval.add_to_relation(RelationEntry::new(
             &self.lookup_elements,
             E::EF::from(-multiplicity),
