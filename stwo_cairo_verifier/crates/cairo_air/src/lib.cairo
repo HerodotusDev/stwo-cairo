@@ -53,7 +53,6 @@ mod hash_imports {
     pub use stwo_verifier_utils::poseidon252::encode_and_hash_memory_section as encode_and_hash_outputs_memory_section;
 }
 use hash_imports::*;
-use components::memory_id_to_big;
 
 pub mod cairo_air;
 use cairo_air::*;
