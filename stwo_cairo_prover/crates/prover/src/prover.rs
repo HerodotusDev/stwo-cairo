@@ -444,6 +444,63 @@ pub mod tests {
         }
 
         #[test]
+        fn test_prove_verify_fibonacci_5() {
+            let compiled_program = get_compiled_cairo_program_path("test_prove_verify_fibonacci_5");
+            let input = run_program_and_adapter(&compiled_program, ProgramType::Json, None);
+            let preprocessed_trace = PreProcessedTraceVariant::CanonicalWithoutPedersen;
+            let cairo_proof = prove_cairo::<Blake2sMerkleChannel>(
+                input,
+                PcsConfig::default(),
+                preprocessed_trace,
+            )
+            .unwrap();
+            verify_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace).unwrap();
+        }
+
+        #[test]
+        fn test_prove_verify_fibonacci_5_shards_serialize() {
+            use cairo_air::utils::{serialize_proof_to_file, ProofFormat};
+            use dev_utils::utils::{get_compiled_cairo_program_path, run_program_and_adapter_shards, ProgramType};
+            use stwo::core::vcs::blake2_merkle::{Blake2sMerkleChannel, Blake2sMerkleHasher};
+
+            // Shard the small fibonacci_5 program. It has 33 steps; with shard size 20 we get 2 shards.
+            const SHARD_SIZE: usize = 20;
+            let compiled_program = get_compiled_cairo_program_path("test_prove_verify_fibonacci_5");
+            let shards = run_program_and_adapter_shards(&compiled_program, ProgramType::Json, None, SHARD_SIZE);
+
+            assert!(shards.len() == 2, "Expected 2 shards, got {}", shards.len());
+
+            let preprocessed_trace = PreProcessedTraceVariant::CanonicalWithoutPedersen;
+            let test_dir = compiled_program.parent().unwrap().to_path_buf();
+
+            for (i, shard) in shards.into_iter().enumerate() {
+                tracing::info!(
+                    "Proving shard {}/{} (initial_pc={}, final_pc={})",
+                    i + 1,
+                    2,
+                    shard.state_transitions.initial_state.pc.0,
+                    shard.state_transitions.final_state.pc.0
+                );
+
+                let proof = prove_cairo::<Blake2sMerkleChannel>(
+                    shard,
+                    PcsConfig::default(),
+                    preprocessed_trace,
+                )
+                .unwrap();
+
+                // Serialize each shard's proof next to compiled.json for this test.
+                let proof_path = test_dir.join(format!("proof_shard_{}.json", i + 1));
+                serialize_proof_to_file::<Blake2sMerkleHasher>(&proof, &proof_path, ProofFormat::CairoSerde)
+                    .expect("Failed to serialize shard proof");
+
+                // Optionally verify to ensure correctness of each shard's proof.
+                verify_cairo::<Blake2sMerkleChannel>(proof, preprocessed_trace).unwrap();
+                tracing::info!("Serialized and verified shard {}/2: {:?}", i + 1, proof_path);
+            }
+        }
+
+        #[test]
         fn test_prove_verify_fibonacci_4m_shards() {
             const N_STEPS: usize = 16_000_013;
             let compiled_program =
