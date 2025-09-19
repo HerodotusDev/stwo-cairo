@@ -41,6 +41,8 @@ fn test_output_logup_sum() {
         public_memory,
         initial_state,
         final_state,
+        overall_initial_state: Option::None(()),
+        overall_final_state: Option::None(()),
         private_memory: stwo_cairo_air::PrivateMemory { address_to_id: array![], id_to_value: array![] },
     };
     let mut lookup_elements = dummy_interaction_lookup_elements();

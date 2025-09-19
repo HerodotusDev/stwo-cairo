@@ -53,6 +53,7 @@ mod hash_imports {
     pub use stwo_verifier_utils::poseidon252::encode_and_hash_memory_section as encode_and_hash_outputs_memory_section;
 }
 use hash_imports::*;
+use components::memory_id_to_big;
 
 pub mod cairo_air;
 use cairo_air::*;
@@ -264,26 +265,29 @@ pub fn lookup_sum(
 ///
 /// Panics if the claim is invalid.
 fn verify_claim(claim: @CairoClaim) {
-    let PublicData {
-        public_memory: PublicMemory {
-            program, public_segments, output: _output, safe_call_ids: _safe_call_ids,
-            }, initial_state: CasmState {
-            pc: initial_pc, ap: initial_ap, fp: initial_fp,
-            }, final_state: CasmState {
-            pc: final_pc, ap: final_ap, fp: final_fp,
-        },
-        private_memory: _private_memory,
-    } = claim.public_data;
+    let PublicData { public_memory, initial_state, final_state, overall_initial_state, overall_final_state, private_memory: _ } = claim.public_data;
+
+    let PublicMemory { program, public_segments, output: _output, safe_call_ids: _safe_call_ids } = public_memory;
+
+    // Use overall boundaries when provided.
+    let CasmState { pc: init_pc, ap: init_ap, fp: init_fp } = match overall_initial_state {
+        Option::Some(state) => *state,
+        Option::None => *initial_state,
+    };
+    let CasmState { pc: fin_pc, ap: fin_ap, fp: fin_fp } = match overall_final_state {
+        Option::Some(state) => *state,
+        Option::None => *final_state,
+    };
 
     verify_builtins(claim.builtins, public_segments);
     verify_program(*program, public_segments);
 
-    let initial_pc: u32 = (*initial_pc).into();
-    let initial_ap: u32 = (*initial_ap).into();
-    let initial_fp: u32 = (*initial_fp).into();
-    let final_pc: u32 = (*final_pc).into();
-    let final_ap: u32 = (*final_ap).into();
-    let final_fp: u32 = (*final_fp).into();
+    let initial_pc: u32 = init_pc.into();
+    let initial_ap: u32 = init_ap.into();
+    let initial_fp: u32 = init_fp.into();
+    let final_pc: u32 = fin_pc.into();
+    let final_ap: u32 = fin_ap.into();
+    let final_fp: u32 = fin_fp.into();
 
     assert!(initial_pc.is_one());
     assert!(initial_pc + 2 < initial_ap);
@@ -693,16 +697,83 @@ pub struct PublicData {
     pub public_memory: PublicMemory,
     pub initial_state: CasmState,
     pub final_state: CasmState,
+    // Optional overall boundary states (used for shards). If None, use initial/final.
+    pub overall_initial_state: Option<CasmState>,
+    pub overall_final_state: Option<CasmState>,
     // Private memory entries yielded into the lookup sum (address->id and id->value).
     pub private_memory: PrivateMemory,
 }
 
-#[derive(Drop, Serde)]
+#[derive(Drop)]
 pub struct PrivateMemory {
     // Triples of (address, id, multiplicity) for the address->id relation.
     pub address_to_id: Array<(u32, u32, u32)>,
-    // Triples of (id, value[8 limbs], multiplicity) for the id->value relation.
-    pub id_to_value: Array<(u32, [u32; 8], u32)>,
+    // Triples of (id, value as 28 M31-limbs, multiplicity) for the id->value relation.
+    pub id_to_value: Array<(u32, [u32; 28], u32)>,
+}
+
+// Manual Serde for PrivateMemory to support fixed-size 28-limb values.
+impl PrivateMemorySerde of Serde<PrivateMemory> {
+    fn serialize(self: @PrivateMemory, ref output: Array<felt252>) {
+        // address_to_id
+        let addr = self.address_to_id.span();
+        let addr_len_u32: u32 = addr.len().try_into().unwrap();
+        output.append(addr_len_u32.into());
+        for (a, b, c) in addr {
+            output.append((*a).into());
+            output.append((*b).into());
+            output.append((*c).into());
+        }
+
+        // id_to_value (id, [28], mult)
+        let idvals = self.id_to_value.span();
+        let idvals_len_u32: u32 = idvals.len().try_into().unwrap();
+        output.append(idvals_len_u32.into());
+        for (id, value, mult) in idvals {
+            output.append((*id).into());
+            let limbs = (*value).span();
+            for limb in limbs {
+                output.append((*limb).into());
+            }
+            output.append((*mult).into());
+        }
+    }
+
+    fn deserialize(ref serialized: Span<felt252>) -> Option<PrivateMemory> {
+        // address_to_id
+        let addr_len: usize = Serde::deserialize(ref serialized)?;
+        let mut address_to_id: Array<(u32, u32, u32)> = array![];
+        let mut i = 0;
+        while i < addr_len {
+            let a: u32 = Serde::deserialize(ref serialized)?;
+            let b: u32 = Serde::deserialize(ref serialized)?;
+            let c: u32 = Serde::deserialize(ref serialized)?;
+            address_to_id.append((a, b, c));
+            i += 1;
+        }
+
+        // id_to_value
+        let idval_len: usize = Serde::deserialize(ref serialized)?;
+        let mut id_to_value: Array<(u32, [u32; 28], u32)> = array![];
+        let mut j: usize = 0;
+        while j < idval_len {
+            let id: u32 = Serde::deserialize(ref serialized)?;
+            let mut limbs: Array<u32> = array![];
+            let k_max: usize = 28;
+            let mut k: usize = 0;
+            while k < k_max {
+                let limb: u32 = Serde::deserialize(ref serialized)?;
+                limbs.append(limb);
+                k = k + 1;
+            }
+            let mult: u32 = Serde::deserialize(ref serialized)?;
+            let fixed: Box<[u32; 28]> = (*limbs.span().try_into().unwrap());
+            id_to_value.append((id, fixed.unbox(), mult));
+            j = j + 1;
+        }
+
+        Option::Some(PrivateMemory { address_to_id, id_to_value })
+    }
 }
 
 #[generate_trait]
@@ -710,13 +781,27 @@ impl PublicDataImpl of PublicDataTrait {
     fn logup_sum(self: @PublicData, lookup_elements: @CairoInteractionElements) -> QM31 {
         let mut sum = Zero::zero();
 
+        // Choose overall boundaries when present.
+        let overall_initial_pc: u32 = match self.overall_initial_state {
+            Option::Some(state) => (*state.pc).into(),
+            Option::None => (*self.initial_state.pc).into(),
+        };
+        let overall_initial_ap: u32 = match self.overall_initial_state {
+            Option::Some(state) => (*state.ap).into(),
+            Option::None => (*self.initial_state.ap).into(),
+        };
+        let overall_final_ap: u32 = match self.overall_final_state {
+            Option::Some(state) => (*state.ap).into(),
+            Option::None => (*self.final_state.ap).into(),
+        };
+
         // Public memory (program, outputs, safe_call, builtin args/returns) — no multiplicities.
         let public_memory_entries = self
             .public_memory
             .get_entries(
-                initial_pc: (*self.initial_state.pc).into(),
-                initial_ap: (*self.initial_state.ap).into(),
-                final_ap: (*self.final_state.ap).into(),
+                initial_pc: overall_initial_pc,
+                initial_ap: overall_initial_ap,
+                final_ap: overall_final_ap,
             );
         sum += sum_public_memory_entries(public_memory_entries, lookup_elements);
 
@@ -735,14 +820,19 @@ impl PublicDataImpl of PublicDataTrait {
             // (-mult)/denom = denom^{-1} * (-mult)
             sum += denom_inv * (Zero::zero() - mult_m31.into());
         }
-        // Id -> Value
+        // Id -> Value (value is 28 M31-limbs). Combine via Horner and multiply by alpha.
         let id_to_value_alpha = *lookup_elements.memory_id_to_value.alpha;
         let id_to_value_z = *lookup_elements.memory_id_to_value.z;
         for (id, value, mult) in self.private_memory.id_to_value.span() {
             let id_m31: M31 = (*id).try_into().unwrap();
-            let mut combine_sum = combine::combine_felt252(*value, id_to_value_alpha);
-            combine_sum = combine_sum + id_m31.into() - id_to_value_z;
-            let denom_inv = combine_sum.inverse();
+            let mut comb: QM31 = Zero::zero();
+            let mut limbs = (*value).span();
+            for limb in limbs {
+                let limb_m31: M31 = (*limb).try_into().unwrap();
+                comb = comb * id_to_value_alpha + limb_m31.into();
+            }
+            comb = comb * id_to_value_alpha; // shift by one power
+            let denom_inv = (comb + id_m31.into() - id_to_value_z).inverse();
             let mult_m31: M31 = (*mult).try_into().unwrap();
             sum += denom_inv * (Zero::zero() - mult_m31.into());
         }
