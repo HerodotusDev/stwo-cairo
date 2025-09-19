@@ -491,7 +491,10 @@ pub mod tests {
 
                 let proof = prove_cairo::<Blake2sMerkleChannel>(
                     shard,
-                    PcsConfig::default(),
+                    PcsConfig {
+                        pow_bits: 26,
+                        fri_config: FriConfig::new(0, 1, 70),
+                    },
                     preprocessed_trace,
                 )
                 .unwrap();
