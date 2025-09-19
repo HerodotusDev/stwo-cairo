@@ -460,17 +460,24 @@ pub mod tests {
         #[test]
         fn test_prove_verify_fibonacci_5_shards_serialize() {
             use cairo_air::utils::{serialize_proof_to_file, ProofFormat};
-            use dev_utils::utils::{get_compiled_cairo_program_path, run_program_and_adapter_shards, ProgramType};
+            use dev_utils::utils::{
+                get_compiled_cairo_program_path, run_program_and_adapter_shards, ProgramType,
+            };
             use stwo::core::vcs::blake2_merkle::{Blake2sMerkleChannel, Blake2sMerkleHasher};
 
             // Shard the small fibonacci_5 program. It has 33 steps; with shard size 20 we get 2 shards.
             const SHARD_SIZE: usize = 20;
             let compiled_program = get_compiled_cairo_program_path("test_prove_verify_fibonacci_5");
-            let shards = run_program_and_adapter_shards(&compiled_program, ProgramType::Json, None, SHARD_SIZE);
+            let shards = run_program_and_adapter_shards(
+                &compiled_program,
+                ProgramType::Json,
+                None,
+                SHARD_SIZE,
+            );
 
             assert!(shards.len() == 2, "Expected 2 shards, got {}", shards.len());
 
-            let preprocessed_trace = PreProcessedTraceVariant::CanonicalWithoutPedersen;
+            let preprocessed_trace = PreProcessedTraceVariant::Canonical;
             let test_dir = compiled_program.parent().unwrap().to_path_buf();
 
             for (i, shard) in shards.into_iter().enumerate() {
@@ -491,12 +498,20 @@ pub mod tests {
 
                 // Serialize each shard's proof next to compiled.json for this test.
                 let proof_path = test_dir.join(format!("proof_shard_{}.json", i + 1));
-                serialize_proof_to_file::<Blake2sMerkleHasher>(&proof, &proof_path, ProofFormat::CairoSerde)
-                    .expect("Failed to serialize shard proof");
+                serialize_proof_to_file::<Blake2sMerkleHasher>(
+                    &proof,
+                    &proof_path,
+                    ProofFormat::CairoSerde,
+                )
+                .expect("Failed to serialize shard proof");
 
                 // Optionally verify to ensure correctness of each shard's proof.
                 verify_cairo::<Blake2sMerkleChannel>(proof, preprocessed_trace).unwrap();
-                tracing::info!("Serialized and verified shard {}/2: {:?}", i + 1, proof_path);
+                tracing::info!(
+                    "Serialized and verified shard {}/2: {:?}",
+                    i + 1,
+                    proof_path
+                );
             }
         }
 
