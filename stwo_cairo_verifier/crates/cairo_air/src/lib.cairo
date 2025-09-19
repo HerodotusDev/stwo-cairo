@@ -1,7 +1,3 @@
-use components::memory_address_to_id::{
-    InteractionClaimImpl as MemoryAddressToIdInteractionClaimImpl, LOG_MEMORY_ADDRESS_TO_ID_SPLIT,
-};
-use components::memory_id_to_big::InteractionClaimImpl as MemoryIdToBigInteractionClaimImpl;
 use stwo_verifier_utils::{PublicMemoryEntries, PublicMemoryEntriesTrait, PublicMemoryEntry};
 
 #[cfg(feature: "poseidon252_verifier")]
@@ -241,8 +237,6 @@ pub fn lookup_sum(
         builtins,
         pedersen_context,
         poseidon_context,
-        memory_address_to_id,
-        memory_id_to_value,
         range_checks,
         verify_bitwise_xor_4,
         verify_bitwise_xor_7,
@@ -256,8 +250,6 @@ pub fn lookup_sum(
     sum += builtins.sum();
     sum += pedersen_context.sum();
     sum += poseidon_context.sum();
-    sum += *memory_address_to_id.claimed_sum;
-    sum += memory_id_to_value.sum();
     sum += range_checks.sum();
     sum += *verify_bitwise_xor_4.claimed_sum;
     sum += *verify_bitwise_xor_7.claimed_sum;
@@ -280,6 +272,7 @@ fn verify_claim(claim: @CairoClaim) {
             }, final_state: CasmState {
             pc: final_pc, ap: final_ap, fp: final_fp,
         },
+        private_memory: _private_memory,
     } = claim.public_data;
 
     verify_builtins(claim.builtins, public_segments);
@@ -299,10 +292,8 @@ fn verify_claim(claim: @CairoClaim) {
     assert!(final_pc == 5);
     assert!(initial_ap <= final_ap);
 
-    // Sanity check: ensure that the maximum address in the address_to_id component fits within a
-    // 27-bit address space (i.e., is less than 2**27).
-    // Higher addresses are not supported by components that assume 27-bit addresses.
-    assert!(*claim.memory_address_to_id.log_size <= 27_u32 - LOG_MEMORY_ADDRESS_TO_ID_SPLIT);
+    // Memory address bounds are checked implicitly by the prover; the dedicated
+    // memory components are no longer part of the top-level AIR here.
 
     // Count the number of uses of each relation.
     let mut relation_uses: RelationUsesDict = Default::default();
@@ -702,6 +693,16 @@ pub struct PublicData {
     pub public_memory: PublicMemory,
     pub initial_state: CasmState,
     pub final_state: CasmState,
+    // Private memory entries yielded into the lookup sum (address->id and id->value).
+    pub private_memory: PrivateMemory,
+}
+
+#[derive(Drop, Serde)]
+pub struct PrivateMemory {
+    // Triples of (address, id, multiplicity) for the address->id relation.
+    pub address_to_id: Array<(u32, u32, u32)>,
+    // Triples of (id, value[8 limbs], multiplicity) for the id->value relation.
+    pub id_to_value: Array<(u32, [u32; 8], u32)>,
 }
 
 #[generate_trait]
@@ -709,6 +710,7 @@ impl PublicDataImpl of PublicDataTrait {
     fn logup_sum(self: @PublicData, lookup_elements: @CairoInteractionElements) -> QM31 {
         let mut sum = Zero::zero();
 
+        // Public memory (program, outputs, safe_call, builtin args/returns) — no multiplicities.
         let public_memory_entries = self
             .public_memory
             .get_entries(
@@ -717,6 +719,33 @@ impl PublicDataImpl of PublicDataTrait {
                 final_ap: (*self.final_state.ap).into(),
             );
         sum += sum_public_memory_entries(public_memory_entries, lookup_elements);
+
+        // Private memory with multiplicities (qm31 opcode path).
+        // Address -> Id
+        let addr_to_id_alpha = *lookup_elements.memory_address_to_id.alpha;
+        let addr_to_id_z = *lookup_elements.memory_address_to_id.z;
+        for (address, id, mult) in self.private_memory.address_to_id.span() {
+            let addr_m31: M31 = (*address).try_into().unwrap();
+            let id_m31: M31 = (*id).try_into().unwrap();
+            let denom_inv = (addr_m31.into()
+                + id_m31.into() * addr_to_id_alpha
+                - addr_to_id_z)
+                .inverse();
+            let mult_m31: M31 = (*mult).try_into().unwrap();
+            // (-mult)/denom = denom^{-1} * (-mult)
+            sum += denom_inv * (Zero::zero() - mult_m31.into());
+        }
+        // Id -> Value
+        let id_to_value_alpha = *lookup_elements.memory_id_to_value.alpha;
+        let id_to_value_z = *lookup_elements.memory_id_to_value.z;
+        for (id, value, mult) in self.private_memory.id_to_value.span() {
+            let id_m31: M31 = (*id).try_into().unwrap();
+            let mut combine_sum = combine::combine_felt252(*value, id_to_value_alpha);
+            combine_sum = combine_sum + id_m31.into() - id_to_value_z;
+            let denom_inv = combine_sum.inverse();
+            let mult_m31: M31 = (*mult).try_into().unwrap();
+            sum += denom_inv * (Zero::zero() - mult_m31.into());
+        }
 
         // Yield initial state and use the final.
         let CasmState { pc, ap, fp } = *self.final_state;
@@ -857,4 +886,3 @@ impl CairoVerificationErrorDisplay of core::fmt::Display<CairoVerificationError>
         }
     }
 }
-

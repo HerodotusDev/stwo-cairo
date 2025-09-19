@@ -75,6 +75,7 @@ fn test_public_data_logup_sum() {
         final_state: CasmState {
             pc: M31Trait::new(5), ap: M31Trait::new(2520), fp: M31Trait::new(1336),
         },
+        private_memory: stwo_cairo_air::PrivateMemory { address_to_id: array![], id_to_value: array![] },
     };
 
     let dummy_lookup_elements = dummy_interaction_lookup_elements();

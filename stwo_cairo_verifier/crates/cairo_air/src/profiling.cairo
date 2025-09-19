@@ -37,7 +37,12 @@ fn test_output_logup_sum() {
         ap: M31Trait::new(upcast(REGISTERS_END)),
         fp: M31Trait::new(upcast(REGISTERS_END)),
     };
-    let public_data = PublicData { public_memory, initial_state, final_state };
+    let public_data = PublicData {
+        public_memory,
+        initial_state,
+        final_state,
+        private_memory: stwo_cairo_air::PrivateMemory { address_to_id: array![], id_to_value: array![] },
+    };
     let mut lookup_elements = dummy_interaction_lookup_elements();
     public_data.logup_sum(@lookup_elements);
 }
