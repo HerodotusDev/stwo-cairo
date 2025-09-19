@@ -553,6 +553,52 @@ pub mod tests {
         }
 
         #[test]
+        fn test_prove_verify_fibonacci_4m_shards_serialize() {
+            use cairo_air::utils::{serialize_proof_to_file, ProofFormat};
+            use dev_utils::utils::{
+                get_compiled_cairo_program_path, run_program_and_adapter_shards, ProgramType,
+            };
+            use stwo::core::vcs::blake2_merkle::{Blake2sMerkleChannel, Blake2sMerkleHasher};
+
+            const N_STEPS: usize = 16_000_013;
+            let compiled_program =
+                get_compiled_cairo_program_path("test_prove_verify_fibonacci_4m");
+            let shards = run_program_and_adapter_shards(
+                &compiled_program,
+                ProgramType::Json,
+                None,
+                N_STEPS / 4,
+            );
+
+            let preprocessed_trace = PreProcessedTraceVariant::Canonical;
+            let test_dir = compiled_program.parent().unwrap().to_path_buf();
+
+            for (i, shard) in shards.into_iter().enumerate() {
+                let proof = prove_cairo::<Blake2sMerkleChannel>(
+                    shard,
+                    PcsConfig {
+                        pow_bits: 26,
+                        fri_config: FriConfig::new(0, 1, 70),
+                    },
+                    preprocessed_trace,
+                )
+                .unwrap();
+
+                // Serialize each shard's proof next to compiled.json for this test.
+                let proof_path = test_dir.join(format!("proof_shard_{}.json", i + 1));
+                serialize_proof_to_file::<Blake2sMerkleHasher>(
+                    &proof,
+                    &proof_path,
+                    ProofFormat::CairoSerde,
+                )
+                .expect("Failed to serialize shard proof");
+
+                // Optionally verify to ensure correctness of each shard's proof.
+                verify_cairo::<Blake2sMerkleChannel>(proof, preprocessed_trace).unwrap();
+            }
+        }
+
+        #[test]
         fn test_e2e_prove_cairo_verify_all_opcode_components() {
             let compiled_program =
                 get_compiled_cairo_program_path("test_prove_verify_all_opcode_components");
