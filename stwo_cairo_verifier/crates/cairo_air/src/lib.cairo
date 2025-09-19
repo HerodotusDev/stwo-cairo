@@ -805,34 +805,27 @@ impl PublicDataImpl of PublicDataTrait {
             );
         sum += sum_public_memory_entries(public_memory_entries, lookup_elements);
 
-        // Private memory with multiplicities (qm31 opcode path).
-        // Address -> Id
-        let addr_to_id_alpha = *lookup_elements.memory_address_to_id.alpha;
-        let addr_to_id_z = *lookup_elements.memory_address_to_id.z;
+        // Private memory with multiplicities: use relation combine to avoid ordering mismatches.
+        // Address -> Id: inputs = [addr, id].
         for (address, id, mult) in self.private_memory.address_to_id.span() {
             let addr_m31: M31 = (*address).try_into().unwrap();
             let id_m31: M31 = (*id).try_into().unwrap();
-            let denom_inv = (addr_m31.into()
-                + id_m31.into() * addr_to_id_alpha
-                - addr_to_id_z)
-                .inverse();
+            let denom = lookup_elements.memory_address_to_id.combine([addr_m31, id_m31]);
+            let denom_inv = denom.inverse();
             let mult_m31: M31 = (*mult).try_into().unwrap();
-            // (-mult)/denom = denom^{-1} * (-mult)
             sum += denom_inv * (Zero::zero() - mult_m31.into());
         }
-        // Id -> Value (value is 28 M31-limbs). Combine via Horner and multiply by alpha.
-        let id_to_value_alpha = *lookup_elements.memory_id_to_value.alpha;
-        let id_to_value_z = *lookup_elements.memory_id_to_value.z;
+        // Id -> Value: inputs = [id, limb_0, ..., limb_27].
         for (id, value, mult) in self.private_memory.id_to_value.span() {
             let id_m31: M31 = (*id).try_into().unwrap();
-            let mut comb: QM31 = Zero::zero();
-            let mut limbs = (*value).span();
+            let mut inputs: Array<M31> = array![id_m31];
+            let limbs = (*value).span();
             for limb in limbs {
-                let limb_m31: M31 = (*limb).try_into().unwrap();
-                comb = comb * id_to_value_alpha + limb_m31.into();
+                inputs.append((*limb).try_into().unwrap());
             }
-            comb = comb * id_to_value_alpha; // shift by one power
-            let denom_inv = (comb + id_m31.into() - id_to_value_z).inverse();
+            let fixed: Box<[M31; 29]> = (*inputs.span().try_into().unwrap());
+            let denom = lookup_elements.memory_id_to_value.combine(fixed.unbox());
+            let denom_inv = denom.inverse();
             let mult_m31: M31 = (*mult).try_into().unwrap();
             sum += denom_inv * (Zero::zero() - mult_m31.into());
         }
