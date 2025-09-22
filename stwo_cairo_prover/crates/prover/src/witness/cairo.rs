@@ -199,6 +199,7 @@ impl CairoClaimGenerator {
             public_memory,
             initial_state,
             final_state,
+            last_current_address: 0,
             overall_initial_state: overall_initial_state_opt,
             overall_final_state: overall_final_state_opt,
         };
@@ -284,9 +285,14 @@ impl CairoClaimGenerator {
         let (poseidon_context_claim, poseidon_context_interaction_gen) = self
             .poseidon_context_trace_generator
             .write_trace(tree_builder, &self.range_checks_trace_generator);
-        let (memory_address_to_id_claim, memory_address_to_id_interaction_gen) = self
-            .memory_address_to_id_trace_generator
-            .write_trace(tree_builder);
+        let (memory_address_to_id_claim, memory_address_to_id_interaction_gen) =
+            self.memory_address_to_id_trace_generator.write_trace(
+                &self.range_checks_trace_generator.rc_19_trace_generator,
+                tree_builder,
+            );
+        // Set last_current_address for public compensation.
+        self.public_data.last_current_address =
+            memory_address_to_id_interaction_gen.last_current_address.0;
 
         // Memory uses "Sequence", split it according to `MAX_SEQUENCE_LOG_SIZE`.
         const LOG_MAX_BIG_SIZE: u32 = MAX_SEQUENCE_LOG_SIZE;
@@ -403,7 +409,12 @@ impl CairoInteractionClaimGenerator {
             .write_interaction_trace(tree_builder, interaction_elements);
         let memory_address_to_id_interaction_claim = self
             .memory_address_to_id_interaction_gen
-            .write_interaction_trace(tree_builder, &interaction_elements.memory_address_to_id);
+            .write_interaction_trace(
+                tree_builder,
+                &interaction_elements.memory_address_to_id,
+                &interaction_elements.address,
+                &interaction_elements.range_checks.rc_19,
+            );
         let memory_id_to_value_interaction_claim = self
             .memory_id_to_value_interaction_gen
             .write_interaction_trace(
