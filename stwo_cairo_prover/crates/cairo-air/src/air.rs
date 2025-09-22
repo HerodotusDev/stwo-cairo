@@ -230,6 +230,10 @@ pub struct PublicData {
     pub public_memory: PublicMemory,
     pub initial_state: CasmState,
     pub final_state: CasmState,
+    // Last non-zero current address used in the memory_address_to_id table.
+    // Defaults to 0 when there are no entries.
+    #[serde(default)]
+    pub last_current_address: u32,
     // Optional overall boundary states (used when proving shards).
     #[serde(default)]
     pub overall_initial_state: Option<CasmState>,
@@ -274,6 +278,16 @@ impl PublicData {
         values_to_inverse.push(-<relations::Opcodes as Relation<M31, QM31>>::combine(
             &lookup_elements.opcodes,
             &self.initial_state.values(),
+        ));
+
+        // Address relation compensation: +1/Address(0) - 1/Address(last_current_address)
+        values_to_inverse.push(<relations::Address as Relation<M31, QM31>>::combine(
+            &lookup_elements.address,
+            &[M31::from_u32_unchecked(0)],
+        ));
+        values_to_inverse.push(-<relations::Address as Relation<M31, QM31>>::combine(
+            &lookup_elements.address,
+            &[M31::from_u32_unchecked(self.last_current_address)],
         ));
 
         let inverted_values = QM31::batch_inverse(&values_to_inverse);
@@ -583,6 +597,7 @@ pub struct CairoInteractionElements {
     pub cube_252: relations::Cube252,
     pub poseidon_round_keys: relations::PoseidonRoundKeys,
     pub range_check_felt_252_width_27: relations::RangeCheckFelt252Width27,
+    pub address: relations::Address,
     pub memory_address_to_id: relations::MemoryAddressToId,
     pub memory_id_to_value: relations::MemoryIdToBig,
     pub range_checks: RangeChecksInteractionElements,
@@ -608,6 +623,7 @@ impl CairoInteractionElements {
             range_check_felt_252_width_27: relations::RangeCheckFelt252Width27::draw(channel),
             partial_ec_mul: relations::PartialEcMul::draw(channel),
             pedersen_points_table: relations::PedersenPointsTable::draw(channel),
+            address: relations::Address::draw(channel),
             memory_address_to_id: relations::MemoryAddressToId::draw(channel),
             memory_id_to_value: relations::MemoryIdToBig::draw(channel),
             range_checks: RangeChecksInteractionElements::draw(channel),
@@ -765,6 +781,8 @@ impl CairoComponents {
             memory_address_to_id::Eval::new(
                 cairo_claim.memory_address_to_id.clone(),
                 interaction_elements.memory_address_to_id.clone(),
+                interaction_elements.address.clone(),
+                interaction_elements.range_checks.rc_19.clone(),
             ),
             interaction_claim.memory_address_to_id.clone().claimed_sum,
         );

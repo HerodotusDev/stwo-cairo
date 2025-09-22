@@ -6,8 +6,8 @@ use cairo_air::components::memory_address_to_id::{
 };
 use cairo_air::relations;
 use itertools::{izip, Itertools};
-use num_traits::Zero;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use num_traits::{One, Zero};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use stwo::core::fields::m31::{BaseField, M31};
 use stwo::core::poly::circle::CanonicCoset;
 use stwo::prover::backend::simd::m31::{PackedBaseField, PackedM31, LOG_N_LANES, N_LANES};
@@ -20,7 +20,8 @@ use stwo_cairo_adapter::memory::Memory;
 use stwo_cairo_common::preprocessed_columns::preprocessed_trace::Seq;
 use stwo_constraint_framework::{LogupTraceGenerator, Relation};
 
-use crate::witness::utils::{AtomicMultiplicityColumn, TreeBuilder};
+use crate::witness::components::range_check_19;
+use crate::witness::utils::{AtomicMultiplicityColumn, Enabler, TreeBuilder};
 
 pub type InputType = M31;
 pub type PackedInputType = PackedM31;
@@ -119,6 +120,7 @@ impl ClaimGenerator {
 
     pub fn write_trace(
         mut self,
+        range_check_19_trace_generator: &range_check_19::ClaimGenerator,
         tree_builder: &mut impl TreeBuilder<SimdBackend>,
     ) -> (Claim, InteractionClaimGenerator) {
         // Convert multiplicities into packed vectors.
@@ -137,6 +139,7 @@ impl ClaimGenerator {
         let mut ids_buf = [M31::zero(); N_LANES];
         let mut mult_buf = [M31::zero(); N_LANES];
         let mut buf_count = 0usize;
+        let mut last_current_address = M31::zero();
 
         for (pack_idx, mult_pack) in multiplicities_packed.iter().enumerate() {
             let mult_arr = mult_pack.to_array();
@@ -147,9 +150,10 @@ impl ClaimGenerator {
                     continue;
                 }
                 addr_buf[buf_count] = M31(global_idx as u32 + 1); // addresses are offset by 1.
-                // AddressToId expects 1-based address in its Index impl.
+                                                                  // AddressToId expects 1-based address in its Index impl.
                 ids_buf[buf_count] = M31(self.address_to_raw_id[global_idx + 1]);
                 mult_buf[buf_count] = M31(m);
+                last_current_address = addr_buf[buf_count];
                 buf_count += 1;
 
                 if buf_count == N_LANES {
@@ -165,6 +169,10 @@ impl ClaimGenerator {
                 }
             }
         }
+
+        // Must add an enabler to do the range_check
+        let n_rows = addrs_used.len() * N_LANES + buf_count;
+        let enabler_col = Enabler::new(n_rows);
 
         if buf_count > 0 {
             // Flush the final partial packed row (padded with zeros).
@@ -185,25 +193,67 @@ impl ClaimGenerator {
         let mut trace: [_; N_TRACE_COLUMNS] =
             std::array::from_fn(|_| Col::<SimdBackend, M31>::zeros(size));
 
+        // Compute prev_address as a global shift of the addresses by 1, with the very first entry defaulting to 0.
+        let mut prev_addrs_used: Vec<PackedM31> = Vec::with_capacity(addrs_used.len());
+        for (i, addr_pack) in addrs_used.iter().enumerate() {
+            let curr_arr = addr_pack.to_array();
+            let mut prev_arr = [M31::zero(); N_LANES];
+            // Shift within the pack.
+            for lane in 1..N_LANES {
+                prev_arr[lane] = curr_arr[lane - 1];
+            }
+            // The first lane depends on the previous pack's last lane, or zero if this is the very first entry.
+            if i > 0 {
+                prev_arr[0] = addrs_used[i - 1].to_array()[N_LANES - 1];
+            } else {
+                prev_arr[0] = M31::zero();
+            }
+            // If this is the last packed row and there is padding inside it, zero-out the
+            // first padded lane's prev-address to avoid enforcing prev > 0 with curr = 0.
+            let first_padding_lane = n_rows % N_LANES;
+            if i == addrs_used.len() - 1 && first_padding_lane != 0 {
+                prev_arr[first_padding_lane] = M31::zero();
+            }
+            prev_addrs_used.push(PackedM31::from_array(prev_arr));
+        }
+
         // Commit only used memory to the trace.
-        for (i, (address, id, multiplicity)) in izip!(addrs_used, ids_used, mults_used)
-            .into_iter()
-            .enumerate()
+        for (i, (prev_address, address, id, multiplicity)) in
+            izip!(&prev_addrs_used, &addrs_used, &ids_used, &mults_used)
+                .into_iter()
+                .enumerate()
         {
             let chunk_idx = i / n_packed_rows;
             let row = i % n_packed_rows;
-            trace[chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[row] = address;
-            trace[1 + chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[row] = id;
-            trace[2 + chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[row] = multiplicity;
+            trace[chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[row] = enabler_col.packed_at(i);
+            trace[1 + chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[row] = prev_address.clone();
+            trace[2 + chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[row] = address.clone();
+            trace[3 + chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[row] = id.clone();
+            trace[4 + chunk_idx * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data[row] = multiplicity.clone();
         }
 
         // Lookup data.
-        let addresses: [_; MEMORY_ADDRESS_TO_ID_SPLIT] =
-            std::array::from_fn(|i| trace[i * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data.clone());
-        let ids: [_; MEMORY_ADDRESS_TO_ID_SPLIT] =
+        let prev_addresses: [_; MEMORY_ADDRESS_TO_ID_SPLIT] =
             std::array::from_fn(|i| trace[1 + i * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data.clone());
-        let multiplicities: [_; MEMORY_ADDRESS_TO_ID_SPLIT] =
+        let addresses: [_; MEMORY_ADDRESS_TO_ID_SPLIT] =
             std::array::from_fn(|i| trace[2 + i * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data.clone());
+        let ids: [_; MEMORY_ADDRESS_TO_ID_SPLIT] =
+            std::array::from_fn(|i| trace[3 + i * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data.clone());
+        let multiplicities: [_; MEMORY_ADDRESS_TO_ID_SPLIT] =
+            std::array::from_fn(|i| trace[4 + i * N_ID_AND_MULT_COLUMNS_PER_CHUNK].data.clone());
+
+        // Add inputs to range check that the address is strictly increasing for all rows,
+        // including padded rows (which contribute zeros).
+        for (i, (prev_addr, addr)) in izip!(&prev_addrs_used, &addrs_used).into_iter().enumerate() {
+            let enabler = enabler_col.packed_at(i);
+            let diff = (*addr) - (*prev_addr) - enabler;
+            range_check_19_trace_generator.add_packed_m31(&[diff]);
+        }
+        // Pad RC19 multiplicities with zeros for remaining packed rows across all splits.
+        let total_packed_rows = MEMORY_ADDRESS_TO_ID_SPLIT * n_packed_rows;
+        for _i in addrs_used.len()..total_packed_rows {
+            range_check_19_trace_generator.add_packed_m31(&[PackedM31::zero()]);
+        }
 
         // Commit on trace.
         let log_size = size.checked_ilog2().unwrap();
@@ -219,6 +269,9 @@ impl ClaimGenerator {
         (
             Claim { log_size },
             InteractionClaimGenerator {
+                n_rows,
+                last_current_address,
+                prev_addresses,
                 addresses,
                 ids,
                 multiplicities,
@@ -228,6 +281,9 @@ impl ClaimGenerator {
 }
 
 pub struct InteractionClaimGenerator {
+    pub n_rows: usize,
+    pub last_current_address: M31,
+    pub prev_addresses: [Vec<PackedM31>; MEMORY_ADDRESS_TO_ID_SPLIT],
     pub addresses: [Vec<PackedM31>; MEMORY_ADDRESS_TO_ID_SPLIT],
     pub ids: [Vec<PackedM31>; MEMORY_ADDRESS_TO_ID_SPLIT],
     pub multiplicities: [Vec<PackedM31>; MEMORY_ADDRESS_TO_ID_SPLIT],
@@ -237,29 +293,48 @@ impl InteractionClaimGenerator {
         self,
         tree_builder: &mut impl TreeBuilder<SimdBackend>,
         lookup_elements: &relations::MemoryAddressToId,
+        address_relation: &relations::Address,
+        range_check_19_relation: &relations::RangeCheck_19,
     ) -> InteractionClaim {
         let packed_size = self.ids[0].len();
         let log_size = packed_size.ilog2() + LOG_N_LANES;
         let mut logup_gen = LogupTraceGenerator::new(log_size);
+        let enabler_col = Enabler::new(self.n_rows);
 
-        for ((addrs0, ids0, mults0), (addrs1, ids1, mults1)) in
-            izip!(&self.addresses, &self.ids, &self.multiplicities).tuples()
+        // MemoryAddressToId relation (address,id) with multiplicities.
+        for (split_idx, (prev_addrs, curr_addrs, ids, mults)) in izip!(
+            &self.prev_addresses,
+            &self.addresses,
+            &self.ids,
+            &self.multiplicities
+        )
+        .enumerate()
         {
             let mut col_gen = logup_gen.new_col();
-            (
-                col_gen.par_iter_mut(),
-                addrs0,
-                addrs1,
-                ids0,
-                ids1,
-                mults0,
-                mults1,
-            )
+            (col_gen.par_iter_mut(), prev_addrs, curr_addrs, ids, mults)
                 .into_par_iter()
-                .for_each(|(writer, &addr0, &addr1, &id0, &id1, &mult0, &mult1)| {
-                    let p0: PackedQM31 = lookup_elements.combine(&[addr0, id0]);
-                    let p1: PackedQM31 = lookup_elements.combine(&[addr1, id1]);
-                    writer.write_frac(p0 * (-mult1) + p1 * (-mult0), p1 * p0);
+                .enumerate()
+                .for_each(|(i, (writer, &prev_addr, &curr_addr, &id, &mult))| {
+                    let global_i = split_idx * packed_size + i;
+                    let enabler = PackedQM31::from(enabler_col.packed_at(global_i));
+                    let p0: PackedQM31 = lookup_elements.combine(&[curr_addr, id]);
+                    let p1: PackedQM31 = address_relation.combine(&[prev_addr]);
+                    writer.write_frac(p0 * (-enabler) + p1 * (-mult), p1 * p0);
+                });
+            col_gen.finalize_col();
+
+            let mut col_gen = logup_gen.new_col();
+            (col_gen.par_iter_mut(), prev_addrs, curr_addrs)
+                .into_par_iter()
+                .enumerate()
+                .for_each(|(i, (writer, &prev_addr, &curr_addr))| {
+                    let one = PackedQM31::one();
+                    let global_i = split_idx * packed_size + i;
+                    let enabler = PackedM31::from(enabler_col.packed_at(global_i));
+                    let p0: PackedQM31 = address_relation.combine(&[curr_addr]);
+                    let p1: PackedQM31 =
+                        range_check_19_relation.combine(&[curr_addr - prev_addr - enabler]);
+                    writer.write_frac(p0 * one + p1 * enabler, p0 * p1);
                 });
             col_gen.finalize_col();
         }

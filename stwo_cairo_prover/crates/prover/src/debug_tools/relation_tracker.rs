@@ -95,6 +95,18 @@ where
         values: public_data.initial_state.values().to_vec(),
     });
 
+    // Address relation compensation to mirror PublicData::logup_sum.
+    entries.push(RelationTrackerEntry {
+        relation: "Address".to_string(),
+        mult: M31::one(),
+        values: vec![M31::from_u32_unchecked(0)],
+    });
+    entries.push(RelationTrackerEntry {
+        relation: "Address".to_string(),
+        mult: -M31::one(),
+        values: vec![M31::from_u32_unchecked(public_data.last_current_address)],
+    });
+
     entries
 }
 

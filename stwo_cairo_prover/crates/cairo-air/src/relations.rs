@@ -5,6 +5,7 @@ relation!(BlakeG, 20);
 relation!(BlakeRound, 35);
 relation!(BlakeRoundSigma, 17);
 relation!(Cube252, 20);
+relation!(Address, 1);
 relation!(MemoryAddressToId, 2);
 relation!(MemoryIdToBig, 29);
 relation!(Opcodes, 3);
