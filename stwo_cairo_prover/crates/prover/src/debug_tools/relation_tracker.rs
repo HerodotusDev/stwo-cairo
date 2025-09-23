@@ -107,6 +107,36 @@ where
         values: vec![M31::from_u32_unchecked(public_data.last_current_address)],
     });
 
+    // Compensation for MemoryIdToBig big table.
+    if public_data.last_big_id != 0 {
+        entries.push(RelationTrackerEntry {
+            relation: "Id".to_string(),
+            mult: M31::one(),
+            values: vec![M31::from_u32_unchecked(
+                stwo_cairo_adapter::memory::LARGE_MEMORY_VALUE_ID_BASE,
+            )],
+        });
+        entries.push(RelationTrackerEntry {
+            relation: "Id".to_string(),
+            mult: -M31::one(),
+            values: vec![M31::from_u32_unchecked(public_data.last_big_id)],
+        });
+    }
+
+    // Compensation for MemoryIdToBig small table (always included).
+    entries.push(RelationTrackerEntry {
+        relation: "Id".to_string(),
+        mult: M31::one(),
+        values: vec![M31::from_u32_unchecked(
+            stwo_cairo_common::prover_types::cpu::PRIME - 1,
+        )],
+    });
+    entries.push(RelationTrackerEntry {
+        relation: "Id".to_string(),
+        mult: -M31::one(),
+        values: vec![M31::from_u32_unchecked(public_data.last_small_id)],
+    });
+
     entries
 }
 

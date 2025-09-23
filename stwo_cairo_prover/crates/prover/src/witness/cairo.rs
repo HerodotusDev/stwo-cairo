@@ -200,6 +200,8 @@ impl CairoClaimGenerator {
             initial_state,
             final_state,
             last_current_address: 0,
+            last_big_id: 0,
+            last_small_id: stwo_cairo_common::prover_types::cpu::PRIME - 1,
             overall_initial_state: overall_initial_state_opt,
             overall_final_state: overall_final_state_opt,
         };
@@ -299,6 +301,7 @@ impl CairoClaimGenerator {
         let (memory_id_to_value_claim, memory_id_to_value_interaction_gen) =
             self.memory_id_to_value_trace_generator.write_trace(
                 tree_builder,
+                &self.range_checks_trace_generator.rc_19_trace_generator,
                 &self.range_checks_trace_generator.rc_9_9_trace_generator,
                 &self.range_checks_trace_generator.rc_9_9_b_trace_generator,
                 &self.range_checks_trace_generator.rc_9_9_c_trace_generator,
@@ -309,6 +312,15 @@ impl CairoClaimGenerator {
                 &self.range_checks_trace_generator.rc_9_9_h_trace_generator,
                 LOG_MAX_BIG_SIZE,
             );
+        // Set last_big_id for public compensation (0 means unused and will be ignored).
+        self.public_data.last_big_id = memory_id_to_value_interaction_gen.last_big_id.0;
+        // Set last_small_id for public compensation. If there are no small rows, set to P-1 so
+        // compensation is neutral.
+        self.public_data.last_small_id = if memory_id_to_value_interaction_gen.small_n_rows > 0 {
+            memory_id_to_value_interaction_gen.last_small_id.0
+        } else {
+            stwo_cairo_common::prover_types::cpu::PRIME - 1
+        };
         let (range_checks_claim, range_checks_interaction_gen) =
             self.range_checks_trace_generator.write_trace(tree_builder);
         let (verify_bitwise_xor_4_claim, verify_bitwise_xor_4_interaction_gen) = self
@@ -420,6 +432,8 @@ impl CairoInteractionClaimGenerator {
             .write_interaction_trace(
                 tree_builder,
                 &interaction_elements.memory_id_to_value,
+                &interaction_elements.id,
+                &interaction_elements.range_checks.rc_19,
                 &interaction_elements.range_checks.rc_9_9,
                 &interaction_elements.range_checks.rc_9_9_b,
                 &interaction_elements.range_checks.rc_9_9_c,

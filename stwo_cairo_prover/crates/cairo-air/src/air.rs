@@ -11,8 +11,10 @@ use stwo::core::proof::StarkProof;
 use stwo::core::vcs::MerkleHasher;
 use stwo::prover::backend::simd::SimdBackend;
 use stwo::prover::ComponentProver;
+use stwo_cairo_adapter::memory::LARGE_MEMORY_VALUE_ID_BASE;
 use stwo_cairo_adapter::HashMap;
 use stwo_cairo_common::prover_types::cpu::CasmState;
+use stwo_cairo_common::prover_types::cpu::PRIME;
 use stwo_cairo_common::prover_types::felt::split_f252;
 use stwo_cairo_serialize::{CairoDeserialize, CairoSerialize};
 use stwo_constraint_framework::preprocessed_columns::PreProcessedColumnId;
@@ -234,6 +236,13 @@ pub struct PublicData {
     // Defaults to 0 when there are no entries.
     #[serde(default)]
     pub last_current_address: u32,
+    // Last current id used in the big memory_id_to_value table (0 if unused).
+    #[serde(default)]
+    pub last_big_id: u32,
+    // Last current id used in the small memory_id_to_value table.
+    // Set to P-1 when there are no small rows so that compensation is neutral.
+    #[serde(default)]
+    pub last_small_id: u32,
     // Optional overall boundary states (used when proving shards).
     #[serde(default)]
     pub overall_initial_state: Option<CasmState>,
@@ -288,6 +297,29 @@ impl PublicData {
         values_to_inverse.push(-<relations::Address as Relation<M31, QM31>>::combine(
             &lookup_elements.address,
             &[M31::from_u32_unchecked(self.last_current_address)],
+        ));
+
+        // Id relation compensation for MemoryIdToBig big table
+        // (+1/Id(LARGE_MEMORY_VALUE_ID_BASE - 1) - 1/Id(last_big_id)) if used.
+        if self.last_big_id != 0 {
+            values_to_inverse.push(<relations::Id as Relation<M31, QM31>>::combine(
+                &lookup_elements.id,
+                &[M31::from_u32_unchecked(LARGE_MEMORY_VALUE_ID_BASE - 1)],
+            ));
+            values_to_inverse.push(-<relations::Id as Relation<M31, QM31>>::combine(
+                &lookup_elements.id,
+                &[M31::from_u32_unchecked(self.last_big_id)],
+            ));
+        }
+
+        // Id relation compensation for MemoryIdToBig small table (always included).
+        values_to_inverse.push(<relations::Id as Relation<M31, QM31>>::combine(
+            &lookup_elements.id,
+            &[M31::from_u32_unchecked(PRIME - 1)],
+        ));
+        values_to_inverse.push(-<relations::Id as Relation<M31, QM31>>::combine(
+            &lookup_elements.id,
+            &[M31::from_u32_unchecked(self.last_small_id)],
         ));
 
         let inverted_values = QM31::batch_inverse(&values_to_inverse);
@@ -598,6 +630,7 @@ pub struct CairoInteractionElements {
     pub poseidon_round_keys: relations::PoseidonRoundKeys,
     pub range_check_felt_252_width_27: relations::RangeCheckFelt252Width27,
     pub address: relations::Address,
+    pub id: relations::Id,
     pub memory_address_to_id: relations::MemoryAddressToId,
     pub memory_id_to_value: relations::MemoryIdToBig,
     pub range_checks: RangeChecksInteractionElements,
@@ -624,6 +657,7 @@ impl CairoInteractionElements {
             partial_ec_mul: relations::PartialEcMul::draw(channel),
             pedersen_points_table: relations::PedersenPointsTable::draw(channel),
             address: relations::Address::draw(channel),
+            id: relations::Id::draw(channel),
             memory_address_to_id: relations::MemoryAddressToId::draw(channel),
             memory_id_to_value: relations::MemoryIdToBig::draw(channel),
             range_checks: RangeChecksInteractionElements::draw(channel),
@@ -791,6 +825,8 @@ impl CairoComponents {
             &cairo_claim.memory_id_to_value.big_log_sizes,
             &interaction_claim.memory_id_to_value.big_claimed_sums,
             &interaction_elements.memory_id_to_value,
+            &interaction_elements.id,
+            &interaction_elements.range_checks.rc_19,
             &interaction_elements.range_checks.rc_9_9,
             &interaction_elements.range_checks.rc_9_9_b,
             &interaction_elements.range_checks.rc_9_9_c,
@@ -806,6 +842,8 @@ impl CairoComponents {
             memory_id_to_big::SmallEval::new(
                 cairo_claim.memory_id_to_value.clone(),
                 interaction_elements.memory_id_to_value.clone(),
+                interaction_elements.id.clone(),
+                interaction_elements.range_checks.rc_19.clone(),
                 interaction_elements.range_checks.rc_9_9.clone(),
                 interaction_elements.range_checks.rc_9_9_b.clone(),
                 interaction_elements.range_checks.rc_9_9_c.clone(),

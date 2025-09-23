@@ -2,7 +2,7 @@ use std::simd::Simd;
 
 use cairo_air::components::memory_id_to_big::{Claim, InteractionClaim, MEMORY_ID_SIZE};
 use cairo_air::relations;
-use itertools::{chain, Itertools};
+use itertools::{chain, izip, Itertools};
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
@@ -10,16 +10,16 @@ use stwo_cairo_adapter::memory::{
     u128_to_4_limbs, EncodedMemoryValueId, Memory, MemoryValueId, LARGE_MEMORY_VALUE_ID_BASE,
 };
 use stwo_cairo_common::memory::{N_M31_IN_FELT252, N_M31_IN_SMALL_FELT252};
-use stwo_cairo_common::preprocessed_columns::preprocessed_utils::SIMD_ENUMERATION_0;
+use stwo_cairo_common::prover_types::cpu::PRIME;
 use stwo_cairo_common::prover_types::felt::split_f252_simd;
 use stwo_cairo_common::prover_types::simd::PackedFelt252;
 
 use crate::witness::components::{
-    range_check_9_9, range_check_9_9_b, range_check_9_9_c, range_check_9_9_d, range_check_9_9_e,
-    range_check_9_9_f, range_check_9_9_g, range_check_9_9_h,
+    range_check_19, range_check_9_9, range_check_9_9_b, range_check_9_9_c, range_check_9_9_d,
+    range_check_9_9_e, range_check_9_9_f, range_check_9_9_g, range_check_9_9_h,
 };
 use crate::witness::prelude::*;
-use crate::witness::utils::{AtomicMultiplicityColumn, TreeBuilder};
+use crate::witness::utils::{AtomicMultiplicityColumn, Enabler, TreeBuilder};
 
 pub type InputType = M31;
 pub type PackedInputType = PackedM31;
@@ -114,6 +114,7 @@ impl ClaimGenerator {
     pub fn write_trace(
         self,
         tree_builder: &mut impl TreeBuilder<SimdBackend>,
+        range_check_19_trace_generator: &range_check_19::ClaimGenerator,
         range_check_9_9_trace_generator: &range_check_9_9::ClaimGenerator,
         range_check_9_9_b_trace_generator: &range_check_9_9_b::ClaimGenerator,
         range_check_9_9_c_trace_generator: &range_check_9_9_c::ClaimGenerator,
@@ -131,13 +132,13 @@ impl ClaimGenerator {
             filter_small_inputs(self.small_values, self.small_mults.into_simd_vec());
 
         // 2) Generate traces from filtered inputs.
-        let big_table_traces = gen_big_memory_traces(
+        let (big_table_traces, last_big_id, big_n_rows) = gen_big_memory_traces(
             big_values_filtered,
             big_mults_packed,
             big_ids_packed.clone(),
             log_max_big_size,
         );
-        let small_table_trace = gen_small_memory_trace(
+        let (small_table_trace, small_n_rows, last_small_id) = gen_small_memory_trace(
             small_values_filtered,
             small_mults_packed,
             small_ids_packed.clone(),
@@ -148,19 +149,24 @@ impl ClaimGenerator {
             .iter()
             .map(|trace| std::array::from_fn(|i| trace[i].data.clone()))
             .collect_vec();
-        let big_multiplicities = big_table_traces
+        let big_prev_ids = big_table_traces
             .iter()
-            .map(|trace| trace.last().unwrap().data.clone())
+            .map(|trace| trace[N_M31_IN_FELT252].data.clone())
             .collect_vec();
         let big_ids: Vec<Vec<PackedM31>> = big_table_traces
             .iter()
-            .map(|trace| trace[N_M31_IN_FELT252].data.clone())
+            .map(|trace| trace[N_M31_IN_FELT252 + 1].data.clone())
+            .collect_vec();
+        let big_multiplicities = big_table_traces
+            .iter()
+            .map(|trace| trace[N_M31_IN_FELT252 + 2].data.clone())
             .collect_vec();
 
         let small_values: [_; N_M31_IN_SMALL_FELT252] =
             std::array::from_fn(|i| small_table_trace[i].data.clone());
-        let small_multiplicities = small_table_trace.last().unwrap().data.clone();
-        let small_ids = small_table_trace[N_M31_IN_SMALL_FELT252].data.clone();
+        let small_prev_ids = small_table_trace[N_M31_IN_SMALL_FELT252].data.clone();
+        let small_ids = small_table_trace[N_M31_IN_SMALL_FELT252 + 1].data.clone();
+        let small_multiplicities = small_table_trace[N_M31_IN_SMALL_FELT252 + 2].data.clone();
 
         // Add inputs to range check that all the values are 9-bit felts.
         for values in &big_components_values {
@@ -253,6 +259,29 @@ impl ClaimGenerator {
             };
         }
 
+        // Add inputs to range check that the id is strictly increasing for all rows,
+        // including padded rows (which contribute zeros).
+        let big_enablers = big_n_rows
+            .iter()
+            .map(|n_row| Enabler::new(*n_row))
+            .collect_vec();
+        for (i, (prev_ids, ids)) in izip!(&big_prev_ids, &big_ids).enumerate() {
+            for (j, (prev_id, id)) in izip!(prev_ids, ids).enumerate() {
+                let enabler = big_enablers[i].packed_at(j);
+                let diff = (*id) - (*prev_id) - enabler;
+                range_check_19_trace_generator.add_packed_m31(&[diff]);
+            }
+        }
+
+        // Add inputs to range check that the id is strictly increasing for all small rows,
+        // including padded rows (which contribute zeros via the enabler mask).
+        let small_enabler = Enabler::new(small_n_rows);
+        for (j, (prev_id, id)) in izip!(&small_prev_ids, &small_ids).enumerate() {
+            let enabler = small_enabler.packed_at(j);
+            let diff = (*id) - (*prev_id) - enabler;
+            range_check_19_trace_generator.add_packed_m31(&[diff]);
+        }
+
         // Extend trace.
         let mut big_log_sizes = vec![];
         for big_table_trace in big_table_traces {
@@ -289,10 +318,16 @@ impl ClaimGenerator {
             InteractionClaimGenerator {
                 big_components_values,
                 big_multiplicities,
+                big_prev_ids,
                 big_ids,
+                big_n_rows,
+                last_big_id,
                 small_values,
                 small_multiplicities,
+                small_prev_ids,
                 small_ids,
+                small_n_rows,
+                last_small_id,
             },
         )
     }
@@ -399,11 +434,14 @@ fn gen_big_memory_traces(
     mults: Vec<PackedM31>,
     ids: Vec<PackedM31>,
     log_max_big_size: u32,
-) -> Vec<Vec<BaseColumn>> {
+) -> (Vec<Vec<BaseColumn>>, M31, Vec<usize>) {
     assert!(log_max_big_size >= LOG_N_LANES);
     let max_big_size = 1 << log_max_big_size;
     assert_eq!(values.len() / N_LANES, mults.len());
     let mut traces = vec![];
+    let mut n_rows = vec![];
+    // For the very first row in the first big trace, set prev_id to the big-id flag value.
+    let mut last_id_from_prev_trace = M31(LARGE_MEMORY_VALUE_ID_BASE - 1);
 
     let packs_per_chunk = max_big_size / N_LANES;
     for ((values, mults), ids) in values
@@ -411,11 +449,14 @@ fn gen_big_memory_traces(
         .zip(mults.chunks(packs_per_chunk))
         .zip(ids.chunks(packs_per_chunk))
     {
-        let trace = gen_single_big_memory_trace(values, mults, ids);
+        let (trace, last_curr_id, n_row) =
+            gen_single_big_memory_trace(values, mults, ids, last_id_from_prev_trace);
+        last_id_from_prev_trace = last_curr_id;
         traces.push(trace);
+        n_rows.push(n_row);
     }
 
-    traces
+    (traces, last_id_from_prev_trace, n_rows)
 }
 
 // Generates the trace of the large value memory table.
@@ -423,17 +464,104 @@ fn gen_single_big_memory_trace(
     values: &[[u32; 8]],
     mults: &[PackedM31],
     ids: &[PackedM31],
-) -> Vec<BaseColumn> {
+    first_prev_id: M31,
+) -> (Vec<BaseColumn>, M31, usize) {
     assert_eq!(values.len(), mults.len() * N_LANES);
+    // Count used rows in this chunk from multiplicities before padding.
+    let n_rows_used: usize = mults
+        .iter()
+        .map(|p| p.to_array().into_iter().filter(|v| v.0 != 0).count())
+        .sum();
     let column_length = values.len().next_power_of_two();
 
     let mut mults = mults.to_vec();
     mults.resize(column_length / N_LANES, PackedM31::zero());
-    let multiplicities = BaseColumn::from_simd(mults);
-    // IDs column
+    let multiplicities = BaseColumn::from_simd(mults.clone());
+
+    // Enabler column (enabled for the first `values.len()` rows)
+    let enabler = Enabler::new(n_rows_used);
+    let n_packed_rows = column_length / N_LANES;
+    let enabler_simd: Vec<PackedM31> = (0..n_packed_rows).map(|i| enabler.packed_at(i)).collect();
+    let enabler_col = BaseColumn::from_simd(enabler_simd);
+
+    // IDs columns (prev_ids and curr_ids)
     let mut ids_vec = ids.to_vec();
-    ids_vec.resize(column_length / N_LANES, PackedM31::zero());
-    let ids_col = BaseColumn::from_simd(ids_vec);
+    let used_packed_rows = (n_rows_used + N_LANES - 1) / N_LANES;
+    let last_real_row_idx = n_rows_used.saturating_sub(1);
+    let last_real_pack_idx = last_real_row_idx / N_LANES;
+    let last_real_lane_idx = last_real_row_idx % N_LANES;
+
+    // Compute last current id of this trace (or zero if there are no rows)
+    let last_curr_id = if n_rows_used == 0 {
+        M31::zero()
+    } else {
+        ids_vec[last_real_pack_idx].to_array()[last_real_lane_idx]
+    };
+
+    // Resize ids to full column length for base trace
+    ids_vec.resize(n_packed_rows, PackedM31::zero());
+    let curr_ids_col = BaseColumn::from_simd(ids_vec.clone());
+
+    // Build prev_ids by shifting curr_ids by one, with special handling across packs and padding
+    let mut prev_ids_simd: Vec<PackedM31> = Vec::with_capacity(n_packed_rows);
+    for pack_idx in 0..n_packed_rows {
+        let curr_pack = ids_vec[pack_idx].to_array();
+        let mut prev_id_buf = [M31::zero(); N_LANES];
+
+        // Determine if this pack is within the used packed rows range
+        if pack_idx < used_packed_rows {
+            // Shift within the pack
+            for lane in 1..N_LANES {
+                let global_row = pack_idx * N_LANES + lane;
+                if global_row < n_rows_used {
+                    prev_id_buf[lane] = curr_pack[lane - 1];
+                } else {
+                    // Padded row -> prev id is zero
+                    prev_id_buf[lane] = M31::zero();
+                }
+            }
+            // First lane: depends on previous pack's last lane, or the provided first_prev_id if this is the first pack.
+            if pack_idx == 0 {
+                // First row in first pack: use provided first_prev_id, unless the first row itself is padded.
+                if values.len() > 0 {
+                    prev_id_buf[0] = first_prev_id;
+                } else {
+                    prev_id_buf[0] = M31::zero();
+                }
+            } else {
+                // Previous pack exists. Use its last lane if current row is not padded.
+                if pack_idx * N_LANES < n_rows_used {
+                    let prev_pack_last = ids_vec[pack_idx - 1].to_array()[N_LANES - 1];
+                    prev_id_buf[0] = prev_pack_last;
+                } else {
+                    prev_id_buf[0] = M31::zero();
+                }
+            }
+
+            // If this is the last used pack and there is padding inside it, force prev_id_buf for padded lanes to zero
+            if pack_idx == used_packed_rows - 1 {
+                let first_padding_lane = n_rows_used % N_LANES;
+                if first_padding_lane != 0 {
+                    for lane in first_padding_lane..N_LANES {
+                        prev_id_buf[lane] = M31::zero();
+                    }
+                }
+            }
+        } else {
+            // Entire pack is padded
+            prev_id_buf = [M31::zero(); N_LANES];
+        }
+
+        // Ensure padded rows have prev_id = 0 by masking with enabler.
+        let en_mask = enabler.packed_at(pack_idx).to_array();
+        for lane in 0..N_LANES {
+            if en_mask[lane].0 == 0 {
+                prev_id_buf[lane] = M31::zero();
+            }
+        }
+        prev_ids_simd.push(PackedM31::from_array(prev_id_buf));
+    }
+    let prev_ids_col = BaseColumn::from_simd(prev_ids_simd);
 
     let packed_values = values
         .iter()
@@ -456,7 +584,15 @@ fn gen_single_big_memory_trace(
         }
     }
 
-    chain!(value_trace, [ids_col, multiplicities]).collect_vec()
+    (
+        chain!(
+            value_trace,
+            [prev_ids_col, curr_ids_col, multiplicities, enabler_col]
+        )
+        .collect_vec(),
+        last_curr_id,
+        n_rows_used,
+    )
 }
 
 // Generates the trace of the small value memory table.
@@ -464,14 +600,82 @@ fn gen_small_memory_trace(
     values: Vec<u128>,
     mut mults: Vec<PackedM31>,
     mut ids: Vec<PackedM31>,
-) -> Vec<BaseColumn> {
+) -> (Vec<BaseColumn>, usize, M31) {
+    // Count used rows in this chunk from multiplicities before padding.
+    let n_rows_used: usize = mults
+        .iter()
+        .map(|p| p.to_array().into_iter().filter(|v| v.0 != 0).count())
+        .sum();
     assert_eq!(values.len(), mults.len() * N_LANES);
     let column_length = values.len().next_power_of_two();
 
+    // Multiplicities column
     mults.resize(column_length / N_LANES, PackedM31::zero());
-    let multiplicities = BaseColumn::from_simd(mults);
-    ids.resize(column_length / N_LANES, PackedM31::zero());
-    let ids_col = BaseColumn::from_simd(ids);
+    let multiplicities = BaseColumn::from_simd(mults.clone());
+    // Enabler column
+    let enabler = Enabler::new(n_rows_used);
+    let n_packed_rows = column_length / N_LANES;
+    let enabler_simd: Vec<PackedM31> = (0..n_packed_rows).map(|i| enabler.packed_at(i)).collect();
+    let enabler_col = BaseColumn::from_simd(enabler_simd);
+    // IDs columns (prev_ids and curr_ids)
+    ids.resize(n_packed_rows, PackedM31::zero());
+    // Compute last current id of this trace (or zero if there are no rows)
+    let last_curr_id = if n_rows_used == 0 {
+        M31::zero()
+    } else {
+        let last_real_row_idx = n_rows_used - 1;
+        let last_real_pack_idx = last_real_row_idx / N_LANES;
+        let last_real_lane_idx = last_real_row_idx % N_LANES;
+        ids[last_real_pack_idx].to_array()[last_real_lane_idx]
+    };
+    let curr_ids_col = BaseColumn::from_simd(ids.clone());
+
+    // Build prev_ids by shifting curr_ids by one; first is 0; padded rows -> 0
+    let used_packed_rows = (n_rows_used + N_LANES - 1) / N_LANES;
+    let mut prev_ids_simd: Vec<PackedM31> = Vec::with_capacity(n_packed_rows);
+    for pack_idx in 0..n_packed_rows {
+        let curr_pack = ids[pack_idx].to_array();
+        let mut prev_arr = [M31::zero(); N_LANES];
+        if pack_idx < used_packed_rows {
+            // Shift within the pack
+            for lane in 1..N_LANES {
+                let global_row = pack_idx * N_LANES + lane;
+                if global_row < n_rows_used {
+                    prev_arr[lane] = curr_pack[lane - 1];
+                } else {
+                    prev_arr[lane] = M31::zero();
+                }
+            }
+            // First lane
+            if pack_idx == 0 {
+                // Small ids start at 0; use P-1 as the first previous id.
+                prev_arr[0] = M31::from_u32_unchecked(PRIME - 1);
+            } else if pack_idx * N_LANES < n_rows_used {
+                prev_arr[0] = ids[pack_idx - 1].to_array()[N_LANES - 1];
+            } else {
+                prev_arr[0] = M31::zero();
+            }
+
+            // If there was partial padding inside the last used pack, zero padded lanes
+            if pack_idx == used_packed_rows - 1 {
+                let first_padding_lane = n_rows_used % N_LANES;
+                if first_padding_lane != 0 {
+                    for lane in first_padding_lane..N_LANES {
+                        prev_arr[lane] = M31::zero();
+                    }
+                }
+            }
+        }
+        // Ensure padded rows have prev_id = 0 by masking with enabler.
+        let en_mask = enabler.packed_at(pack_idx).to_array();
+        for lane in 0..N_LANES {
+            if en_mask[lane].0 == 0 {
+                prev_arr[lane] = M31::zero();
+            }
+        }
+        prev_ids_simd.push(PackedM31::from_array(prev_arr));
+    }
+    let prev_ids_col = BaseColumn::from_simd(prev_ids_simd);
 
     let packed_values: Vec<[Simd<u32, N_LANES>; 4]> = values
         .into_iter()
@@ -504,23 +708,39 @@ fn gen_small_memory_trace(
         }
     }
 
-    chain!(values_trace, [ids_col, multiplicities]).collect_vec()
+    (
+        chain!(
+            values_trace,
+            [prev_ids_col, curr_ids_col, multiplicities, enabler_col]
+        )
+        .collect_vec(),
+        n_rows_used,
+        last_curr_id,
+    )
 }
 
 #[derive(Debug)]
 pub struct InteractionClaimGenerator {
     pub big_components_values: Vec<[Vec<PackedM31>; N_M31_IN_FELT252]>,
     pub big_multiplicities: Vec<Vec<PackedM31>>,
+    pub big_prev_ids: Vec<Vec<PackedM31>>,
     pub big_ids: Vec<Vec<PackedM31>>,
+    pub big_n_rows: Vec<usize>,
+    pub last_big_id: M31,
     pub small_values: [Vec<PackedM31>; N_M31_IN_SMALL_FELT252],
     pub small_multiplicities: Vec<PackedM31>,
+    pub small_prev_ids: Vec<PackedM31>,
     pub small_ids: Vec<PackedM31>,
+    pub small_n_rows: usize,
+    pub last_small_id: M31,
 }
 impl InteractionClaimGenerator {
     pub fn write_interaction_trace(
         self,
         tree_builder: &mut impl TreeBuilder<SimdBackend>,
         lookup_elements: &relations::MemoryIdToBig,
+        id_relation: &relations::Id,
+        range_check_19_relation: &relations::RangeCheck_19,
         range9_9_lookup_elements: &relations::RangeCheck_9_9,
         range9_9_b_lookup_elements: &relations::RangeCheck_9_9_B,
         range9_9_c_lookup_elements: &relations::RangeCheck_9_9_C,
@@ -534,24 +754,35 @@ impl InteractionClaimGenerator {
             .big_components_values
             .iter()
             .zip(self.big_multiplicities.iter())
+            .zip(self.big_prev_ids.iter())
             .zip(self.big_ids.iter())
-            .map(|((big_components_values, big_multiplicities), big_ids)| {
-                let res = Self::gen_big_memory_interaction_trace(
-                    big_components_values,
-                    big_multiplicities,
-                    big_ids,
-                    lookup_elements,
-                    range9_9_lookup_elements,
-                    range9_9_b_lookup_elements,
-                    range9_9_c_lookup_elements,
-                    range9_9_d_lookup_elements,
-                    range9_9_e_lookup_elements,
-                    range9_9_f_lookup_elements,
-                    range9_9_g_lookup_elements,
-                    range9_9_h_lookup_elements,
-                );
-                res
-            })
+            .zip(self.big_n_rows.iter())
+            .map(
+                |(
+                    (((big_components_values, big_multiplicities), prev_big_ids), big_ids),
+                    n_rows,
+                )| {
+                    let res = Self::gen_big_memory_interaction_trace(
+                        big_components_values,
+                        big_multiplicities,
+                        prev_big_ids,
+                        big_ids,
+                        lookup_elements,
+                        id_relation,
+                        range_check_19_relation,
+                        range9_9_lookup_elements,
+                        range9_9_b_lookup_elements,
+                        range9_9_c_lookup_elements,
+                        range9_9_d_lookup_elements,
+                        range9_9_e_lookup_elements,
+                        range9_9_f_lookup_elements,
+                        range9_9_g_lookup_elements,
+                        range9_9_h_lookup_elements,
+                        *n_rows,
+                    );
+                    res
+                },
+            )
             .unzip();
         for big_trace in big_traces {
             tree_builder.extend_evals(big_trace);
@@ -559,6 +790,8 @@ impl InteractionClaimGenerator {
 
         let (small_trace, small_claimed_sum) = self.gen_small_memory_interaction_trace(
             lookup_elements,
+            id_relation,
+            range_check_19_relation,
             range9_9_lookup_elements,
             range9_9_b_lookup_elements,
             range9_9_c_lookup_elements,
@@ -575,8 +808,11 @@ impl InteractionClaimGenerator {
     fn gen_big_memory_interaction_trace(
         big_components_values: &[Vec<PackedM31>; N_M31_IN_FELT252],
         big_multiplicities: &[PackedM31],
+        prev_big_ids: &[PackedM31],
         big_ids: &[PackedM31],
         lookup_elements: &relations::MemoryIdToBig,
+        id_relation: &relations::Id,
+        range_check_19_relation: &relations::RangeCheck_19,
         range9_9_lookup_elements: &relations::RangeCheck_9_9,
         range9_9_b_lookup_elements: &relations::RangeCheck_9_9_B,
         range9_9_c_lookup_elements: &relations::RangeCheck_9_9_C,
@@ -585,6 +821,7 @@ impl InteractionClaimGenerator {
         range9_9_f_lookup_elements: &relations::RangeCheck_9_9_F,
         range9_9_g_lookup_elements: &relations::RangeCheck_9_9_G,
         range9_9_h_lookup_elements: &relations::RangeCheck_9_9_H,
+        n_rows: usize,
     ) -> (
         Vec<CircleEvaluation<SimdBackend, M31, BitReversedOrder>>,
         QM31,
@@ -593,6 +830,7 @@ impl InteractionClaimGenerator {
             .iter()
             .all(|v| v.len() == big_multiplicities.len()));
         let big_table_log_size = big_components_values[0].len().ilog2() + LOG_N_LANES;
+        let enabler_col = Enabler::new(n_rows);
         let mut big_values_logup_gen = LogupTraceGenerator::new(big_table_log_size);
 
         // Every element is 9-bit.
@@ -627,10 +865,12 @@ impl InteractionClaimGenerator {
             col_gen.finalize_col();
         }
 
-        // Yield large values.
+        // Yield large values and use previous id
         let mut col_gen = big_values_logup_gen.new_col();
         #[allow(clippy::needless_range_loop)]
         for vec_row in 0..1 << (big_table_log_size - LOG_N_LANES) {
+            let enabler = enabler_col.packed_at(vec_row);
+            let mult = PackedQM31::from(big_multiplicities[vec_row]);
             let id_and_value: [_; N_M31_IN_FELT252 + MEMORY_ID_SIZE] = std::array::from_fn(|i| {
                 if i == 0 {
                     big_ids[vec_row]
@@ -638,8 +878,27 @@ impl InteractionClaimGenerator {
                     big_components_values[i - 1][vec_row]
                 }
             });
-            let denom: PackedQM31 = lookup_elements.combine(&id_and_value);
-            col_gen.write_frac(vec_row, (-big_multiplicities[vec_row]).into(), denom);
+            let prev_id = prev_big_ids[vec_row];
+            let denom0: PackedQM31 = lookup_elements.combine(&id_and_value);
+            let denom1: PackedQM31 = id_relation.combine(&[prev_id]);
+            col_gen.write_frac(
+                vec_row,
+                denom1 * (-mult) + denom0 * (-enabler),
+                denom0 * denom1,
+            );
+        }
+        col_gen.finalize_col();
+
+        // Yield id and range check difference
+        let mut col_gen = big_values_logup_gen.new_col();
+        #[allow(clippy::needless_range_loop)]
+        for vec_row in 0..1 << (big_table_log_size - LOG_N_LANES) {
+            let enabler = enabler_col.packed_at(vec_row);
+            let id = big_ids[vec_row];
+            let prev_id = prev_big_ids[vec_row];
+            let denom0: PackedQM31 = id_relation.combine(&[id]);
+            let denom1: PackedQM31 = range_check_19_relation.combine(&[id - prev_id - enabler]);
+            col_gen.write_frac(vec_row, denom1 * enabler + denom0, denom0 * denom1);
         }
         col_gen.finalize_col();
 
@@ -649,6 +908,8 @@ impl InteractionClaimGenerator {
     fn gen_small_memory_interaction_trace(
         &self,
         lookup_elements: &relations::MemoryIdToBig,
+        id_relation: &relations::Id,
+        range_check_19_relation: &relations::RangeCheck_19,
         range9_9_lookup_elements: &relations::RangeCheck_9_9,
         range9_9_b_lookup_elements: &relations::RangeCheck_9_9_B,
         range9_9_c_lookup_elements: &relations::RangeCheck_9_9_C,
@@ -658,6 +919,7 @@ impl InteractionClaimGenerator {
         QM31,
     ) {
         let small_table_log_size = self.small_values[0].len().ilog2() + LOG_N_LANES;
+        let enabler_col = Enabler::new(self.small_n_rows);
         let mut small_values_logup_gen = LogupTraceGenerator::new(small_table_log_size);
 
         // Every element is 9-bit.
@@ -684,9 +946,11 @@ impl InteractionClaimGenerator {
             col_gen.finalize_col();
         }
 
-        // Yield small values.
+        // Yield small values and use previous id.
         let mut col_gen = small_values_logup_gen.new_col();
         for vec_row in 0..1 << (small_table_log_size - LOG_N_LANES) {
+            let enabler = enabler_col.packed_at(vec_row);
+            let mult = PackedQM31::from(self.small_multiplicities[vec_row]);
             let id_and_value: [_; N_M31_IN_SMALL_FELT252 + MEMORY_ID_SIZE] =
                 std::array::from_fn(|i| {
                     if i == 0 {
@@ -695,8 +959,26 @@ impl InteractionClaimGenerator {
                         self.small_values[i - 1][vec_row]
                     }
                 });
-            let denom: PackedQM31 = lookup_elements.combine(&id_and_value);
-            col_gen.write_frac(vec_row, (-self.small_multiplicities[vec_row]).into(), denom);
+            let prev_id = self.small_prev_ids[vec_row];
+            let denom0: PackedQM31 = lookup_elements.combine(&id_and_value);
+            let denom1: PackedQM31 = id_relation.combine(&[prev_id]);
+            col_gen.write_frac(
+                vec_row,
+                denom1 * (-mult) + denom0 * (-enabler),
+                denom0 * denom1,
+            );
+        }
+        col_gen.finalize_col();
+
+        // Yield id and range check difference.
+        let mut col_gen = small_values_logup_gen.new_col();
+        for vec_row in 0..1 << (small_table_log_size - LOG_N_LANES) {
+            let enabler = enabler_col.packed_at(vec_row);
+            let id = self.small_ids[vec_row];
+            let prev_id = self.small_prev_ids[vec_row];
+            let denom0: PackedQM31 = id_relation.combine(&[id]);
+            let denom1: PackedQM31 = range_check_19_relation.combine(&[id - prev_id - enabler]);
+            col_gen.write_frac(vec_row, denom1 * enabler + denom0, denom0 * denom1);
         }
         col_gen.finalize_col();
 
@@ -725,9 +1007,9 @@ mod tests {
     use crate::debug_tools::assert_constraints::assert_component;
     use crate::debug_tools::mock_tree_builder::MockCommitmentScheme;
     use crate::witness::components::{
-        memory_address_to_id, range_check_9_9, range_check_9_9_b, range_check_9_9_c,
-        range_check_9_9_d, range_check_9_9_e, range_check_9_9_f, range_check_9_9_g,
-        range_check_9_9_h,
+        memory_address_to_id, range_check_19, range_check_9_9, range_check_9_9_b,
+        range_check_9_9_c, range_check_9_9_d, range_check_9_9_e, range_check_9_9_f,
+        range_check_9_9_g, range_check_9_9_h,
     };
 
     #[test]
@@ -762,6 +1044,7 @@ mod tests {
         // Base trace.
         let mut tree_builder = commitment_scheme.tree_builder();
         let id_to_big = super::ClaimGenerator::new(&memory);
+        let range_check_19 = range_check_19::ClaimGenerator::new();
         let range_check_9_9 = range_check_9_9::ClaimGenerator::new();
         let range_check_9_9_b = range_check_9_9_b::ClaimGenerator::new();
         let range_check_9_9_c = range_check_9_9_c::ClaimGenerator::new();
@@ -772,6 +1055,7 @@ mod tests {
         let range_check_9_9_h = range_check_9_9_h::ClaimGenerator::new();
         let (claim, interaction_generator) = id_to_big.write_trace(
             &mut tree_builder,
+            &range_check_19,
             &range_check_9_9,
             &range_check_9_9_b,
             &range_check_9_9_c,
@@ -791,6 +1075,8 @@ mod tests {
         let interaction_claim = interaction_generator.write_interaction_trace(
             &mut tree_builder,
             &interaction_elements.memory_id_to_value,
+            &interaction_elements.id,
+            &interaction_elements.range_checks.rc_19,
             &interaction_elements.range_checks.rc_9_9,
             &interaction_elements.range_checks.rc_9_9_b,
             &interaction_elements.range_checks.rc_9_9_c,
@@ -807,6 +1093,8 @@ mod tests {
             &claim.big_log_sizes,
             &interaction_claim.big_claimed_sums,
             &interaction_elements.memory_id_to_value,
+            &interaction_elements.id,
+            &interaction_elements.range_checks.rc_19,
             &interaction_elements.range_checks.rc_9_9,
             &interaction_elements.range_checks.rc_9_9_b,
             &interaction_elements.range_checks.rc_9_9_c,
@@ -823,6 +1111,8 @@ mod tests {
             SmallEval {
                 log_n_rows: claim.small_log_size,
                 lookup_elements: interaction_elements.memory_id_to_value.clone(),
+                id_relation: interaction_elements.id.clone(),
+                range_check_19_relation: interaction_elements.range_checks.rc_19.clone(),
                 range_check_9_9_relation: interaction_elements.range_checks.rc_9_9.clone(),
                 range_check_9_9_b_relation: interaction_elements.range_checks.rc_9_9_b.clone(),
                 range_check_9_9_c_relation: interaction_elements.range_checks.rc_9_9_c.clone(),
@@ -859,6 +1149,7 @@ mod tests {
         let mut commitment_scheme = MockCommitmentScheme::default();
         let mut tree_builder = commitment_scheme.tree_builder();
         let id_to_big = super::ClaimGenerator::new(&memory);
+        let range_check_19 = range_check_19::ClaimGenerator::new();
         let range_check_9_9 = range_check_9_9::ClaimGenerator::new();
         let range_check_9_9_b = range_check_9_9_b::ClaimGenerator::new();
         let range_check_9_9_c = range_check_9_9_c::ClaimGenerator::new();
@@ -879,6 +1170,7 @@ mod tests {
 
         let (claim, ..) = id_to_big.write_trace(
             &mut tree_builder,
+            &range_check_19,
             &range_check_9_9,
             &range_check_9_9_b,
             &range_check_9_9_c,
