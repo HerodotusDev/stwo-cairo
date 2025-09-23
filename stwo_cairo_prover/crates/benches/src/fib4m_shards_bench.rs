@@ -20,8 +20,8 @@ fn main() {
     let _span = span!(Level::INFO, "fib4m_shards_bench").entered();
 
     // Match test_prove_verify_fibonacci_4m_shards setup.
-    const N_STEPS: usize = 16_000_013;
-    let compiled_program = get_compiled_cairo_program_path("test_prove_verify_fibonacci_4M");
+    const N_STEPS: usize = 400_013;
+    let compiled_program = get_compiled_cairo_program_path("test_prove_verify_fibonacci_100k");
 
     info!(
         "Loading shards from compiled program: {:?}",
@@ -29,7 +29,7 @@ fn main() {
     );
     let t0 = Instant::now();
     let shards =
-        run_program_and_adapter_shards(&compiled_program, ProgramType::Json, None, N_STEPS / 4);
+        run_program_and_adapter_shards(&compiled_program, ProgramType::Json, None, N_STEPS / 2);
     let load_dur = t0.elapsed();
     info!("Loaded {} shards in {:.3?}", shards.len(), load_dur);
 
