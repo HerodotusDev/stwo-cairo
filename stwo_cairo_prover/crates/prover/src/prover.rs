@@ -428,9 +428,9 @@ pub mod tests {
         }
 
         #[test]
-        fn test_prove_verify_fibonacci_4m() {
+        fn test_prove_verify_fibonacci_100k() {
             let compiled_program =
-                get_compiled_cairo_program_path("test_prove_verify_fibonacci_4M");
+                get_compiled_cairo_program_path("test_prove_verify_fibonacci_100k");
             let input = run_program_and_adapter(&compiled_program, ProgramType::Json, None);
             let preprocessed_trace = PreProcessedTraceVariant::CanonicalWithoutPedersen;
             let cairo_proof = prove_cairo::<Blake2sMerkleChannel>(
@@ -443,10 +443,10 @@ pub mod tests {
         }
 
         #[test]
-        fn test_prove_verify_fibonacci_4m_shards() {
+        fn test_prove_verify_fibonacci_100k_shards() {
             const N_STEPS: usize = 16_000_013;
             let compiled_program =
-                get_compiled_cairo_program_path("test_prove_verify_fibonacci_4m");
+                get_compiled_cairo_program_path("test_prove_verify_fibonacci_100k");
             let shards = run_program_and_adapter_shards(
                 &compiled_program,
                 ProgramType::Json,
