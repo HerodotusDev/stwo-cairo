@@ -124,7 +124,12 @@ impl ClaimGenerator {
         range_check_9_9_g_trace_generator: &range_check_9_9_g::ClaimGenerator,
         range_check_9_9_h_trace_generator: &range_check_9_9_h::ClaimGenerator,
         log_max_big_size: u32,
-    ) -> (Claim, InteractionClaimGenerator) {
+    ) -> (
+        Claim,
+        InteractionClaimGenerator,
+        Vec<stwo::core::pcs::TreeSubspan>,
+        stwo::core::pcs::TreeSubspan,
+    ) {
         // 1) Filter out zero-multiplicity entries up front and generate IDs.
         let (big_values_filtered, big_mults_packed, big_ids_packed) =
             filter_big_inputs(self.big_values, self.big_mults.into_simd_vec());
@@ -284,6 +289,7 @@ impl ClaimGenerator {
 
         // Extend trace.
         let mut big_log_sizes = vec![];
+        let mut big_base_spans = Vec::with_capacity(big_table_traces.len());
         for big_table_trace in big_table_traces {
             let big_log_size = big_table_trace[0].length.ilog2();
             big_log_sizes.push(big_log_size);
@@ -296,7 +302,8 @@ impl ClaimGenerator {
                     )
                 })
                 .collect_vec();
-            tree_builder.extend_evals(trace);
+            let span = tree_builder.extend_evals(trace);
+            big_base_spans.push(span);
         }
         let small_log_size = small_table_trace[0].len().ilog2();
         let trace = small_table_trace
@@ -308,7 +315,7 @@ impl ClaimGenerator {
                 )
             })
             .collect_vec();
-        tree_builder.extend_evals(trace);
+        let small_base_span = tree_builder.extend_evals(trace);
 
         (
             Claim {
@@ -329,6 +336,8 @@ impl ClaimGenerator {
                 small_n_rows,
                 last_small_id,
             },
+            big_base_spans,
+            small_base_span,
         )
     }
 }
@@ -749,7 +758,11 @@ impl InteractionClaimGenerator {
         range9_9_f_lookup_elements: &relations::RangeCheck_9_9_F,
         range9_9_g_lookup_elements: &relations::RangeCheck_9_9_G,
         range9_9_h_lookup_elements: &relations::RangeCheck_9_9_H,
-    ) -> InteractionClaim {
+    ) -> (
+        InteractionClaim,
+        Vec<stwo::core::pcs::TreeSubspan>,
+        stwo::core::pcs::TreeSubspan,
+    ) {
         let (big_traces, big_claimed_sums): (Vec<_>, Vec<_>) = self
             .big_components_values
             .iter()
@@ -784,8 +797,10 @@ impl InteractionClaimGenerator {
                 },
             )
             .unzip();
+        let mut big_interaction_spans = Vec::with_capacity(big_traces.len());
         for big_trace in big_traces {
-            tree_builder.extend_evals(big_trace);
+            let span = tree_builder.extend_evals(big_trace);
+            big_interaction_spans.push(span);
         }
 
         let (small_trace, small_claimed_sum) = self.gen_small_memory_interaction_trace(
@@ -797,12 +812,16 @@ impl InteractionClaimGenerator {
             range9_9_c_lookup_elements,
             range9_9_d_lookup_elements,
         );
-        tree_builder.extend_evals(small_trace);
+        let small_interaction_span = tree_builder.extend_evals(small_trace);
 
-        InteractionClaim {
-            small_claimed_sum,
-            big_claimed_sums,
-        }
+        (
+            InteractionClaim {
+                small_claimed_sum,
+                big_claimed_sums,
+            },
+            big_interaction_spans,
+            small_interaction_span,
+        )
     }
 
     fn gen_big_memory_interaction_trace(
@@ -1053,26 +1072,31 @@ mod tests {
         let range_check_9_9_f = range_check_9_9_f::ClaimGenerator::new();
         let range_check_9_9_g = range_check_9_9_g::ClaimGenerator::new();
         let range_check_9_9_h = range_check_9_9_h::ClaimGenerator::new();
-        let (claim, interaction_generator) = id_to_big.write_trace(
-            &mut tree_builder,
-            &range_check_19,
-            &range_check_9_9,
-            &range_check_9_9_b,
-            &range_check_9_9_c,
-            &range_check_9_9_d,
-            &range_check_9_9_e,
-            &range_check_9_9_f,
-            &range_check_9_9_g,
-            &range_check_9_9_h,
-            log_max_seq_size,
-        );
+        let (claim, interaction_generator, _id_to_big_base_spans_big, _id_to_big_base_spans_small) =
+            id_to_big.write_trace(
+                &mut tree_builder,
+                &range_check_19,
+                &range_check_9_9,
+                &range_check_9_9_b,
+                &range_check_9_9_c,
+                &range_check_9_9_d,
+                &range_check_9_9_e,
+                &range_check_9_9_f,
+                &range_check_9_9_g,
+                &range_check_9_9_h,
+                log_max_seq_size,
+            );
         tree_builder.finalize_interaction();
 
         // Interaction trace.
         let mut dummy_channel = Blake2sChannel::default();
         let interaction_elements = CairoInteractionElements::draw(&mut dummy_channel);
         let mut tree_builder = commitment_scheme.tree_builder();
-        let interaction_claim = interaction_generator.write_interaction_trace(
+        let (
+            interaction_claim,
+            _id_to_big_interaction_spans_big,
+            _id_to_big_interaction_spans_small,
+        ) = interaction_generator.write_interaction_trace(
             &mut tree_builder,
             &interaction_elements.memory_id_to_value,
             &interaction_elements.id,
