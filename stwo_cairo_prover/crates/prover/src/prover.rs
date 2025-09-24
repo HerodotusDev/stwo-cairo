@@ -79,19 +79,19 @@ where
 
     claim
         .public_data
-        .memory_columns
-        .memory_address_to_id_base_columns =
-        collect_columns_for_span(&commitment_scheme, &addr_to_id_base_span);
+        .memory_poly_coeffs
+        .memory_address_to_id_base_poly_coeffs =
+        collect_poly_coeffs_for_span(&commitment_scheme, &addr_to_id_base_span);
     claim
         .public_data
-        .memory_columns
-        .memory_id_to_big_base_columns_big =
-        collect_columns_for_spans(&commitment_scheme, &id_to_big_base_spans_big);
+        .memory_poly_coeffs
+        .memory_id_to_big_base_poly_coeffs_big =
+        collect_poly_coeffs_for_spans(&commitment_scheme, &id_to_big_base_spans_big);
     claim
         .public_data
-        .memory_columns
-        .memory_id_to_big_base_columns_small =
-        collect_columns_for_span(&commitment_scheme, &id_to_big_base_span_small);
+        .memory_poly_coeffs
+        .memory_id_to_big_base_poly_coeffs_small =
+        collect_poly_coeffs_for_span(&commitment_scheme, &id_to_big_base_span_small);
 
     // Draw interaction elements.
     let interaction_pow = SimdBackend::grind(channel, INTERACTION_POW_BITS);
@@ -125,19 +125,19 @@ where
 
     claim
         .public_data
-        .memory_columns
-        .memory_address_to_id_interaction_columns =
-        collect_columns_for_span(&commitment_scheme, &addr_to_id_interaction_span);
+        .memory_poly_coeffs
+        .memory_address_to_id_interaction_poly_coeffs =
+        collect_poly_coeffs_for_span(&commitment_scheme, &addr_to_id_interaction_span);
     claim
         .public_data
-        .memory_columns
-        .memory_id_to_big_interaction_columns_big =
-        collect_columns_for_spans(&commitment_scheme, &id_to_big_interaction_spans_big);
+        .memory_poly_coeffs
+        .memory_id_to_big_interaction_poly_coeffs_big =
+        collect_poly_coeffs_for_spans(&commitment_scheme, &id_to_big_interaction_spans_big);
     claim
         .public_data
-        .memory_columns
-        .memory_id_to_big_interaction_columns_small =
-        collect_columns_for_span(&commitment_scheme, &id_to_big_interaction_span_small);
+        .memory_poly_coeffs
+        .memory_id_to_big_interaction_poly_coeffs_small =
+        collect_poly_coeffs_for_span(&commitment_scheme, &id_to_big_interaction_span_small);
 
     // Component provers.
     let component_builder = CairoComponents::new(
@@ -177,20 +177,21 @@ where
 }
 
 // Helper functions to collect memory columns for interpolation.
-fn collect_columns_for_span<MC: MerkleChannel>(
+fn collect_poly_coeffs_for_span<MC: MerkleChannel>(
     cs: &CommitmentSchemeProver<'_, SimdBackend, MC>,
     span: &stwo::core::pcs::TreeSubspan,
 ) -> Vec<Vec<M31>>
 where
     SimdBackend: BackendForChannel<MC>,
 {
-    let evals = cs.evaluations();
-    let cols = &evals[span.tree_index][span.col_start..span.col_end];
-    cols.iter()
-        .map(|eval| eval.to_cpu().values.to_cpu())
+    let polynomials = cs.polynomials();
+    let poly_slice = &polynomials[span.tree_index][span.col_start..span.col_end];
+    poly_slice
+        .iter()
+        .map(|poly| poly.coeffs.to_cpu())
         .collect()
 }
-fn collect_columns_for_spans<MC: MerkleChannel>(
+fn collect_poly_coeffs_for_spans<MC: MerkleChannel>(
     cs: &CommitmentSchemeProver<'_, SimdBackend, MC>,
     spans: &[stwo::core::pcs::TreeSubspan],
 ) -> Vec<Vec<Vec<M31>>>
@@ -199,7 +200,7 @@ where
 {
     spans
         .iter()
-        .map(|s| collect_columns_for_span(cs, s))
+        .map(|s| collect_poly_coeffs_for_span(cs, s))
         .collect()
 }
 

@@ -204,7 +204,7 @@ impl CairoClaimGenerator {
             last_small_id: stwo_cairo_common::prover_types::cpu::PRIME - 1,
             overall_initial_state: overall_initial_state_opt,
             overall_final_state: overall_final_state_opt,
-            memory_columns: cairo_air::air::MemoryColumns::default(),
+            memory_poly_coeffs: cairo_air::air::MemoryPolyCoeffs::default(),
         };
 
         let blake_context_trace_generator = BlakeContextClaimGenerator::new(memory);

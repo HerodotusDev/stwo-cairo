@@ -228,20 +228,20 @@ impl CairoClaim {
 }
 
 #[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize, Default, Clone, Debug)]
-pub struct MemoryColumns {
+pub struct MemoryPolyCoeffs {
     #[serde(default)]
-    pub memory_address_to_id_base_columns: Vec<Vec<M31>>,
+    pub memory_address_to_id_base_poly_coeffs: Vec<Vec<M31>>,
     #[serde(default)]
-    pub memory_address_to_id_interaction_columns: Vec<Vec<M31>>,
+    pub memory_address_to_id_interaction_poly_coeffs: Vec<Vec<M31>>,
     // MemoryIdToBig trace columns (domain evaluations). Multiple big traces.
     #[serde(default)]
-    pub memory_id_to_big_base_columns_big: Vec<Vec<Vec<M31>>>,
+    pub memory_id_to_big_base_poly_coeffs_big: Vec<Vec<Vec<M31>>>,
     #[serde(default)]
-    pub memory_id_to_big_base_columns_small: Vec<Vec<M31>>,
+    pub memory_id_to_big_base_poly_coeffs_small: Vec<Vec<M31>>,
     #[serde(default)]
-    pub memory_id_to_big_interaction_columns_big: Vec<Vec<Vec<M31>>>,
+    pub memory_id_to_big_interaction_poly_coeffs_big: Vec<Vec<Vec<M31>>>,
     #[serde(default)]
-    pub memory_id_to_big_interaction_columns_small: Vec<Vec<M31>>,
+    pub memory_id_to_big_interaction_poly_coeffs_small: Vec<Vec<M31>>,
 }
 
 #[derive(Serialize, Deserialize, CairoSerialize, CairoDeserialize)]
@@ -267,7 +267,7 @@ pub struct PublicData {
     pub overall_final_state: Option<CasmState>,
     // Grouped trace columns (not mixed into transcript).
     #[serde(default)]
-    pub memory_columns: MemoryColumns,
+    pub memory_poly_coeffs: MemoryPolyCoeffs,
 }
 impl PublicData {
     /// Sums the logup of the public data.
