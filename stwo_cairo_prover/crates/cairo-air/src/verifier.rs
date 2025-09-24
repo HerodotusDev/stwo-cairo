@@ -25,7 +25,7 @@ use crate::builtins_air::BuiltinsClaim;
 use crate::components::memory_address_to_id::MEMORY_ADDRESS_TO_ID_SPLIT;
 use crate::{CairoProof, PreProcessedTraceVariant};
 
-fn verify_claim(claim: &CairoClaim) {
+pub(crate) fn verify_claim(claim: &CairoClaim) {
     let PublicData {
         public_memory:
             PublicMemory {
