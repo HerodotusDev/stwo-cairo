@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use cairo_air::verifier::verify_cairo;
+use cairo_air::aggregate::aggregate_cairo;
 use cairo_air::PreProcessedTraceVariant;
 use dev_utils::utils::{
     get_compiled_cairo_program_path, run_program_and_adapter_shards, ProgramType,
@@ -55,8 +55,8 @@ fn main() {
         info!("Proved shard {} in {:.3?}", i + 1, prove_dur);
 
         let t_verify = Instant::now();
-        verify_cairo::<Blake2sMerkleChannel>(proof, preprocessed_trace)
-            .expect("verify_cairo failed");
+        aggregate_cairo::<Blake2sMerkleChannel>(proof, preprocessed_trace)
+            .expect("aggregate_cairo failed");
         let verify_dur = t_verify.elapsed();
         info!("Verified shard {} in {:.3?}", i + 1, verify_dur);
 

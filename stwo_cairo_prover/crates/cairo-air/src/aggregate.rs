@@ -7,6 +7,10 @@ use stwo::core::channel::{Channel, MerkleChannel};
 use stwo::core::circle::CirclePoint;
 use stwo::core::fields::qm31::{SecureField, SECURE_EXTENSION_DEGREE};
 use stwo::core::pcs::{CommitmentSchemeVerifier, TreeVec};
+use stwo::core::poly::circle::CanonicCoset;
+use stwo::core::constraints::coset_vanishing;
+use stwo::core::fields::FieldExpOps;
+use stwo_constraint_framework::{FrameworkEval, PointEvaluator};
 use stwo::core::verifier::{VerificationError, PREPROCESSED_TRACE_IDX};
 use stwo::core::ColumnVec;
 use stwo::prover::backend::cpu::CpuCirclePoly;
@@ -85,26 +89,215 @@ fn assert_address_to_id_preimage_oods(
     interaction_samples: &[Vec<SecureField>],
     sampled_values: &TreeVec<ColumnVec<Vec<SecureField>>>,
 ) {
-    // Accumulate using public samples as mask.
+    // Accumulate using public samples via direct eval.evaluate on a PointEvaluator.
     let mut evaluation_accumulator = PointEvaluationAccumulator::new(random_coeff);
-    let public_mask: TreeVec<ColumnVec<Vec<SecureField>>> = TreeVec(vec![
-        vec![],
-        base_samples.to_vec(),
-        interaction_samples.to_vec(),
-    ]);
-    components
-        .memory_address_to_id
-        .evaluate_constraint_quotients_at_point(
+    let point_eval = PointEvaluator::new(
+        TreeVec(vec![
+            vec![],
+            base_samples.iter().collect(),
+            interaction_samples.iter().collect(),
+        ]),
+        &mut evaluation_accumulator,
+        coset_vanishing(
+            CanonicCoset::new(components.memory_address_to_id.eval.log_size).coset,
             oods_point,
-            &public_mask,
-            &mut evaluation_accumulator,
-        );
+        )
+        .inverse(),
+        components.memory_address_to_id.eval.log_size,
+        components.memory_address_to_id.claimed_sum(),
+    );
+    components.memory_address_to_id.eval.evaluate(point_eval);
     let preimage_oods = evaluation_accumulator.finalize().to_m31_array();
 
     // Accumulate using mask provided by the proof (sampled_values).
     let mut evaluation_accumulator = PointEvaluationAccumulator::new(random_coeff);
     components
         .memory_address_to_id
+        .evaluate_constraint_quotients_at_point(
+            oods_point,
+            sampled_values,
+            &mut evaluation_accumulator,
+        );
+    let proof_oods = evaluation_accumulator.finalize().to_m31_array();
+
+    assert_eq!(preimage_oods, proof_oods);
+}
+
+/// Samples the public Id->Big polynomials (big and small tables) at the component mask points.
+/// Returns (big_base_samples, big_interaction_samples, small_base_samples, small_interaction_samples).
+fn sample_id_to_big_public_polys(
+    claim: &crate::air::CairoClaim,
+    components: &CairoComponents,
+    oods_point: CirclePoint<SecureField>,
+) -> (
+    Vec<Vec<Vec<SecureField>>>,
+    Vec<Vec<Vec<SecureField>>>,
+    Vec<Vec<SecureField>>,
+    Vec<Vec<SecureField>>,
+) {
+    // Big components: sample each big component separately.
+    let big_components = &components.memory_id_to_value.0;
+    let big_base_coeffs_all = &claim
+        .public_data
+        .memory_poly_coeffs
+        .memory_id_to_big_base_poly_coeffs_big;
+    let big_inter_coeffs_all = &claim
+        .public_data
+        .memory_poly_coeffs
+        .memory_id_to_big_interaction_poly_coeffs_big;
+
+    let mut big_base_samples_all = Vec::with_capacity(big_components.len());
+    let mut big_interaction_samples_all = Vec::with_capacity(big_components.len());
+
+    for (i, big_comp) in big_components.iter().enumerate() {
+        let mask = big_comp.mask_points(oods_point).to_vec();
+        let base_coeffs = &big_base_coeffs_all[i];
+        let inter_coeffs = &big_inter_coeffs_all[i];
+
+        let base_polys: Vec<CpuCirclePoly> =
+            base_coeffs.iter().cloned().map(CpuCirclePoly::new).collect();
+        let inter_polys: Vec<CpuCirclePoly> =
+            inter_coeffs.iter().cloned().map(CpuCirclePoly::new).collect();
+
+        let base_samples = base_polys
+            .iter()
+            .zip(mask[1].clone())
+            .map(|(poly, points)| {
+                points
+                    .iter()
+                    .map(|&point| poly.eval_at_point(point))
+                    .collect_vec()
+            })
+            .collect_vec();
+        let interaction_samples = inter_polys
+            .iter()
+            .zip(mask[2].clone())
+            .map(|(poly, points)| {
+                points
+                    .iter()
+                    .map(|&point| poly.eval_at_point(point))
+                    .collect_vec()
+            })
+            .collect_vec();
+
+        big_base_samples_all.push(base_samples);
+        big_interaction_samples_all.push(interaction_samples);
+    }
+
+    // Small component: one component.
+    let small_comp = &components.memory_id_to_value.1;
+    let mask = small_comp.mask_points(oods_point).to_vec();
+    let small_base_coeffs = &claim
+        .public_data
+        .memory_poly_coeffs
+        .memory_id_to_big_base_poly_coeffs_small;
+    let small_inter_coeffs = &claim
+        .public_data
+        .memory_poly_coeffs
+        .memory_id_to_big_interaction_poly_coeffs_small;
+
+    let small_base_polys: Vec<CpuCirclePoly> = small_base_coeffs
+        .iter()
+        .cloned()
+        .map(CpuCirclePoly::new)
+        .collect();
+    let small_inter_polys: Vec<CpuCirclePoly> = small_inter_coeffs
+        .iter()
+        .cloned()
+        .map(CpuCirclePoly::new)
+        .collect();
+
+    let small_base_samples = small_base_polys
+        .iter()
+        .zip(mask[1].clone())
+        .map(|(poly, points)| {
+            points
+                .iter()
+                .map(|&point| poly.eval_at_point(point))
+                .collect_vec()
+        })
+        .collect_vec();
+    let small_interaction_samples = small_inter_polys
+        .iter()
+        .zip(mask[2].clone())
+        .map(|(poly, points)| {
+            points
+                .iter()
+                .map(|&point| poly.eval_at_point(point))
+                .collect_vec()
+        })
+        .collect_vec();
+
+    (
+        big_base_samples_all,
+        big_interaction_samples_all,
+        small_base_samples,
+        small_interaction_samples,
+    )
+}
+
+/// Asserts that the reconstructed OODS from public polynomials equals the prover's OODS
+/// for the Id->Big component (big traces and small trace).
+fn assert_id_to_big_preimage_oods(
+    random_coeff: SecureField,
+    oods_point: CirclePoint<SecureField>,
+    components: &CairoComponents,
+    big_base_samples: &[Vec<Vec<SecureField>>],
+    big_interaction_samples: &[Vec<Vec<SecureField>>],
+    small_base_samples: &[Vec<SecureField>],
+    small_interaction_samples: &[Vec<SecureField>],
+    sampled_values: &TreeVec<ColumnVec<Vec<SecureField>>>,
+) {
+    // Big components: iterate and compare.
+    for (i, big_comp) in components.memory_id_to_value.0.iter().enumerate() {
+        let mut evaluation_accumulator = PointEvaluationAccumulator::new(random_coeff);
+        let point_eval = PointEvaluator::new(
+            TreeVec(vec![
+                vec![],
+                big_base_samples[i].iter().collect(),
+                big_interaction_samples[i].iter().collect(),
+            ]),
+            &mut evaluation_accumulator,
+            coset_vanishing(CanonicCoset::new(big_comp.eval.log_size()).coset, oods_point)
+                .inverse(),
+            big_comp.eval.log_size(),
+            big_comp.claimed_sum(),
+        );
+        big_comp.eval.evaluate(point_eval);
+        let preimage_oods = evaluation_accumulator.finalize().to_m31_array();
+
+        let mut evaluation_accumulator = PointEvaluationAccumulator::new(random_coeff);
+        big_comp.evaluate_constraint_quotients_at_point(
+            oods_point,
+            sampled_values,
+            &mut evaluation_accumulator,
+        );
+        let proof_oods = evaluation_accumulator.finalize().to_m31_array();
+
+        assert_eq!(preimage_oods, proof_oods);
+    }
+
+    // Small component.
+    let mut evaluation_accumulator = PointEvaluationAccumulator::new(random_coeff);
+    let point_eval = PointEvaluator::new(
+        TreeVec(vec![
+            vec![],
+            small_base_samples.iter().collect(),
+            small_interaction_samples.iter().collect(),
+        ]),
+        &mut evaluation_accumulator,
+        coset_vanishing(CanonicCoset::new(components.memory_id_to_value.1.eval.log_size()).coset, oods_point)
+        .inverse(),
+        components.memory_id_to_value.1.eval.log_size(),
+        components.memory_id_to_value.1.claimed_sum(),
+    );
+    components.memory_id_to_value.1.eval.evaluate(point_eval);
+    let preimage_oods = evaluation_accumulator.finalize().to_m31_array();
+
+    let mut evaluation_accumulator = PointEvaluationAccumulator::new(random_coeff);
+    components
+        .memory_id_to_value
+        .1
         .evaluate_constraint_quotients_at_point(
             oods_point,
             sampled_values,
@@ -198,6 +391,24 @@ pub fn aggregate_cairo<MC: MerkleChannel>(
         &component_generator,
         &base_samples,
         &interaction_samples,
+        &stark_proof.sampled_values,
+    );
+
+    // Id->Big components (big + small): sample and assert OODS equality.
+    let (
+        big_base_samples,
+        big_interaction_samples,
+        small_base_samples,
+        small_interaction_samples,
+    ) = sample_id_to_big_public_polys(&claim, &component_generator, oods_point);
+    assert_id_to_big_preimage_oods(
+        random_coeff,
+        oods_point,
+        &component_generator,
+        &big_base_samples,
+        &big_interaction_samples,
+        &small_base_samples,
+        &small_interaction_samples,
         &stark_proof.sampled_values,
     );
 
