@@ -1,14 +1,77 @@
+use itertools::Itertools;
 use num_traits::Zero;
+use stwo::core::air::Component;
 use stwo::core::air::Components as CoreComponents;
 use stwo::core::channel::{Channel, MerkleChannel};
 use stwo::core::circle::CirclePoint;
 use stwo::core::fields::qm31::{SecureField, SECURE_EXTENSION_DEGREE};
 use stwo::core::pcs::CommitmentSchemeVerifier;
 use stwo::core::verifier::{VerificationError, PREPROCESSED_TRACE_IDX};
+use stwo::prover::backend::cpu::CpuCirclePoly;
 
 use crate::air::{lookup_sum, CairoComponents, CairoInteractionElements, CairoProof};
 use crate::verifier::{verify_claim, CairoVerificationError, INTERACTION_POW_BITS};
 use crate::PreProcessedTraceVariant;
+
+/// Samples the public Address->Id polynomials at the component mask points.
+/// Returns (base_samples, interaction_samples), each as Vec<column> where
+/// each inner Vec is the evaluations at mask points for that polynomial.
+fn sample_address_to_id_public_polys(
+    claim: &crate::air::CairoClaim,
+    components: &CairoComponents,
+    oods_point: CirclePoint<SecureField>,
+) -> (Vec<Vec<SecureField>>, Vec<Vec<SecureField>>) {
+    // Collect per-component mask points for Address->Id.
+    let mask = components
+        .memory_address_to_id
+        .mask_points(oods_point)
+        .to_vec();
+
+    // Build polynomials directly from public_data coefficients (no interpolation).
+    let base_poly_coeffs = &claim
+        .public_data
+        .memory_poly_coeffs
+        .memory_address_to_id_base_poly_coeffs;
+    let interaction_poly_coeffs = &claim
+        .public_data
+        .memory_poly_coeffs
+        .memory_address_to_id_interaction_poly_coeffs;
+
+    let base_polys: Vec<CpuCirclePoly> = base_poly_coeffs
+        .iter()
+        .cloned()
+        .map(CpuCirclePoly::new)
+        .collect();
+    let interaction_polys: Vec<CpuCirclePoly> = interaction_poly_coeffs
+        .iter()
+        .cloned()
+        .map(CpuCirclePoly::new)
+        .collect();
+
+    // Sample them at the component mask points (tree 1 is base, tree 2 is interaction).
+    let base_samples = base_polys
+        .iter()
+        .zip(mask[1].clone())
+        .map(|(poly, points)| {
+            points
+                .iter()
+                .map(|&point| poly.eval_at_point(point))
+                .collect_vec()
+        })
+        .collect_vec();
+    let interaction_samples = interaction_polys
+        .iter()
+        .zip(mask[2].clone())
+        .map(|(poly, points)| {
+            points
+                .iter()
+                .map(|&point| poly.eval_at_point(point))
+                .collect_vec()
+        })
+        .collect_vec();
+
+    (base_samples, interaction_samples)
+}
 
 /// Verifies a Cairo proof by reproducing the full verification protocol without
 /// calling the stwo `verify` helper (unfolded for aggregation/experimentation).
@@ -83,6 +146,10 @@ pub fn aggregate_cairo<MC: MerkleChannel>(
     let mut sample_points = core_components.mask_points(oods_point);
     // Add composition polynomial mask points (one per coordinate).
     sample_points.push(vec![vec![oods_point]; SECURE_EXTENSION_DEGREE]);
+
+    // Address-to-ID: sample public polynomials on the component mask points (base + interaction).
+    let (_base_samples, _interaction_samples) =
+        sample_address_to_id_public_polys(&claim, &component_generator, oods_point);
 
     // Verify DEEP-ALI: composition OODS value must match components' computed value.
     // Extract composition OODS evaluation from the sampled_values structure.
