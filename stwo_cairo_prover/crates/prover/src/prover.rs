@@ -8,6 +8,7 @@ use cairo_air::{CairoProof, PreProcessedTraceVariant};
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use stwo::core::channel::{Channel, MerkleChannel};
+use stwo::core::fields::m31::M31;
 use stwo::core::fields::qm31::SecureField;
 use stwo::core::fri::FriConfig;
 use stwo::core::pcs::PcsConfig;
@@ -16,6 +17,7 @@ use stwo::core::proof_of_work::GrindOps;
 use stwo::core::vcs::MerkleHasher;
 use stwo::prover::backend::simd::SimdBackend;
 use stwo::prover::backend::BackendForChannel;
+use stwo::prover::backend::Column;
 use stwo::prover::poly::circle::PolyOps;
 use stwo::prover::{prove, CommitmentSchemeProver, ProvingError};
 use stwo_cairo_adapter::ProverInput;
@@ -63,11 +65,33 @@ where
     // Base trace.
     let mut tree_builder = commitment_scheme.tree_builder();
     let span = span!(Level::INFO, "Base trace").entered();
-    let (claim, interaction_generator) = cairo_claim_generator.write_trace(&mut tree_builder);
+    let (
+        mut claim,
+        interaction_generator,
+        addr_to_id_base_span,
+        id_to_big_base_spans_big,
+        id_to_big_base_span_small,
+    ) = cairo_claim_generator.write_trace(&mut tree_builder);
     span.exit();
 
     claim.mix_into(channel);
     tree_builder.commit(channel);
+
+    claim
+        .public_data
+        .memory_columns
+        .memory_address_to_id_base_columns =
+        collect_columns_for_span(&commitment_scheme, &addr_to_id_base_span);
+    claim
+        .public_data
+        .memory_columns
+        .memory_id_to_big_base_columns_big =
+        collect_columns_for_spans(&commitment_scheme, &id_to_big_base_spans_big);
+    claim
+        .public_data
+        .memory_columns
+        .memory_id_to_big_base_columns_small =
+        collect_columns_for_span(&commitment_scheme, &id_to_big_base_span_small);
 
     // Draw interaction elements.
     let interaction_pow = SimdBackend::grind(channel, INTERACTION_POW_BITS);
@@ -77,8 +101,12 @@ where
     // Interaction trace.
     let span = span!(Level::INFO, "Interaction trace").entered();
     let mut tree_builder = commitment_scheme.tree_builder();
-    let interaction_claim =
-        interaction_generator.write_interaction_trace(&mut tree_builder, &interaction_elements);
+    let (
+        interaction_claim,
+        addr_to_id_interaction_span,
+        id_to_big_interaction_spans_big,
+        id_to_big_interaction_span_small,
+    ) = interaction_generator.write_interaction_trace(&mut tree_builder, &interaction_elements);
     span.exit();
 
     tracing::info!(
@@ -91,8 +119,25 @@ where
         SecureField::zero()
     );
 
+    // Commit, then capture the memory_address_to_id interaction columns similarly.
     interaction_claim.mix_into(channel);
     tree_builder.commit(channel);
+
+    claim
+        .public_data
+        .memory_columns
+        .memory_address_to_id_interaction_columns =
+        collect_columns_for_span(&commitment_scheme, &addr_to_id_interaction_span);
+    claim
+        .public_data
+        .memory_columns
+        .memory_id_to_big_interaction_columns_big =
+        collect_columns_for_spans(&commitment_scheme, &id_to_big_interaction_spans_big);
+    claim
+        .public_data
+        .memory_columns
+        .memory_id_to_big_interaction_columns_small =
+        collect_columns_for_span(&commitment_scheme, &id_to_big_interaction_span_small);
 
     // Component provers.
     let component_builder = CairoComponents::new(
@@ -129,6 +174,33 @@ where
         interaction_claim,
         stark_proof: proof,
     })
+}
+
+// Helper functions to collect memory columns for interpolation.
+fn collect_columns_for_span<MC: MerkleChannel>(
+    cs: &CommitmentSchemeProver<'_, SimdBackend, MC>,
+    span: &stwo::core::pcs::TreeSubspan,
+) -> Vec<Vec<M31>>
+where
+    SimdBackend: BackendForChannel<MC>,
+{
+    let evals = cs.evaluations();
+    let cols = &evals[span.tree_index][span.col_start..span.col_end];
+    cols.iter()
+        .map(|eval| eval.to_cpu().values.to_cpu())
+        .collect()
+}
+fn collect_columns_for_spans<MC: MerkleChannel>(
+    cs: &CommitmentSchemeProver<'_, SimdBackend, MC>,
+    spans: &[stwo::core::pcs::TreeSubspan],
+) -> Vec<Vec<Vec<M31>>>
+where
+    SimdBackend: BackendForChannel<MC>,
+{
+    spans
+        .iter()
+        .map(|s| collect_columns_for_span(cs, s))
+        .collect()
 }
 
 #[derive(Default)]

@@ -204,6 +204,7 @@ impl CairoClaimGenerator {
             last_small_id: stwo_cairo_common::prover_types::cpu::PRIME - 1,
             overall_initial_state: overall_initial_state_opt,
             overall_final_state: overall_final_state_opt,
+            memory_columns: cairo_air::air::MemoryColumns::default(),
         };
 
         let blake_context_trace_generator = BlakeContextClaimGenerator::new(memory);
@@ -229,7 +230,13 @@ impl CairoClaimGenerator {
     pub fn write_trace(
         mut self,
         tree_builder: &mut impl TreeBuilder<SimdBackend>,
-    ) -> (CairoClaim, CairoInteractionClaimGenerator) {
+    ) -> (
+        CairoClaim,
+        CairoInteractionClaimGenerator,
+        stwo::core::pcs::TreeSubspan,
+        Vec<stwo::core::pcs::TreeSubspan>,
+        stwo::core::pcs::TreeSubspan,
+    ) {
         let span = span!(Level::INFO, "write opcode trace").entered();
         let (opcodes_claim, opcodes_interaction_gen) = self.opcodes.write_trace(
             tree_builder,
@@ -287,31 +294,38 @@ impl CairoClaimGenerator {
         let (poseidon_context_claim, poseidon_context_interaction_gen) = self
             .poseidon_context_trace_generator
             .write_trace(tree_builder, &self.range_checks_trace_generator);
-        let (memory_address_to_id_claim, memory_address_to_id_interaction_gen) =
-            self.memory_address_to_id_trace_generator.write_trace(
-                &self.range_checks_trace_generator.rc_19_trace_generator,
-                tree_builder,
-            );
+        let (
+            memory_address_to_id_claim,
+            memory_address_to_id_interaction_gen,
+            memory_address_to_id_base_span,
+        ) = self.memory_address_to_id_trace_generator.write_trace(
+            &self.range_checks_trace_generator.rc_19_trace_generator,
+            tree_builder,
+        );
         // Set last_current_address for public compensation.
         self.public_data.last_current_address =
             memory_address_to_id_interaction_gen.last_current_address.0;
 
         // Memory uses "Sequence", split it according to `MAX_SEQUENCE_LOG_SIZE`.
         const LOG_MAX_BIG_SIZE: u32 = MAX_SEQUENCE_LOG_SIZE;
-        let (memory_id_to_value_claim, memory_id_to_value_interaction_gen) =
-            self.memory_id_to_value_trace_generator.write_trace(
-                tree_builder,
-                &self.range_checks_trace_generator.rc_19_trace_generator,
-                &self.range_checks_trace_generator.rc_9_9_trace_generator,
-                &self.range_checks_trace_generator.rc_9_9_b_trace_generator,
-                &self.range_checks_trace_generator.rc_9_9_c_trace_generator,
-                &self.range_checks_trace_generator.rc_9_9_d_trace_generator,
-                &self.range_checks_trace_generator.rc_9_9_e_trace_generator,
-                &self.range_checks_trace_generator.rc_9_9_f_trace_generator,
-                &self.range_checks_trace_generator.rc_9_9_g_trace_generator,
-                &self.range_checks_trace_generator.rc_9_9_h_trace_generator,
-                LOG_MAX_BIG_SIZE,
-            );
+        let (
+            memory_id_to_value_claim,
+            memory_id_to_value_interaction_gen,
+            id_to_big_base_spans_big,
+            id_to_big_base_span_small,
+        ) = self.memory_id_to_value_trace_generator.write_trace(
+            tree_builder,
+            &self.range_checks_trace_generator.rc_19_trace_generator,
+            &self.range_checks_trace_generator.rc_9_9_trace_generator,
+            &self.range_checks_trace_generator.rc_9_9_b_trace_generator,
+            &self.range_checks_trace_generator.rc_9_9_c_trace_generator,
+            &self.range_checks_trace_generator.rc_9_9_d_trace_generator,
+            &self.range_checks_trace_generator.rc_9_9_e_trace_generator,
+            &self.range_checks_trace_generator.rc_9_9_f_trace_generator,
+            &self.range_checks_trace_generator.rc_9_9_g_trace_generator,
+            &self.range_checks_trace_generator.rc_9_9_h_trace_generator,
+            LOG_MAX_BIG_SIZE,
+        );
         // Set last_big_id for public compensation (0 means unused and will be ignored).
         self.public_data.last_big_id = memory_id_to_value_interaction_gen.last_big_id.0;
         // Set last_small_id for public compensation. If there are no small rows, set to P-1 so
@@ -368,6 +382,9 @@ impl CairoClaimGenerator {
                 verify_bitwise_xor_8_interaction_gen,
                 verify_bitwise_xor_9_interaction_gen,
             },
+            memory_address_to_id_base_span,
+            id_to_big_base_spans_big,
+            id_to_big_base_span_small,
         )
     }
 }
@@ -393,7 +410,12 @@ impl CairoInteractionClaimGenerator {
         self,
         tree_builder: &mut impl TreeBuilder<SimdBackend>,
         interaction_elements: &CairoInteractionElements,
-    ) -> CairoInteractionClaim {
+    ) -> (
+        CairoInteractionClaim,
+        stwo::core::pcs::TreeSubspan,
+        Vec<stwo::core::pcs::TreeSubspan>,
+        stwo::core::pcs::TreeSubspan,
+    ) {
         let opcodes_interaction_claims = self
             .opcodes_interaction_gen
             .write_interaction_trace(tree_builder, interaction_elements);
@@ -419,7 +441,7 @@ impl CairoInteractionClaimGenerator {
         let poseidon_context_interaction_claim = self
             .poseidon_context_interaction_gen
             .write_interaction_trace(tree_builder, interaction_elements);
-        let memory_address_to_id_interaction_claim = self
+        let (memory_address_to_id_interaction_claim, memory_address_to_id_interaction_span) = self
             .memory_address_to_id_interaction_gen
             .write_interaction_trace(
                 tree_builder,
@@ -427,7 +449,11 @@ impl CairoInteractionClaimGenerator {
                 &interaction_elements.address,
                 &interaction_elements.range_checks.rc_19,
             );
-        let memory_id_to_value_interaction_claim = self
+        let (
+            memory_id_to_value_interaction_claim,
+            id_to_big_interaction_spans_big,
+            id_to_big_interaction_span_small,
+        ) = self
             .memory_id_to_value_interaction_gen
             .write_interaction_trace(
                 tree_builder,
@@ -460,20 +486,25 @@ impl CairoInteractionClaimGenerator {
             .verify_bitwise_xor_9_interaction_gen
             .write_interaction_trace(tree_builder, &interaction_elements.verify_bitwise_xor_9);
 
-        CairoInteractionClaim {
-            opcodes: opcodes_interaction_claims,
-            verify_instruction: verify_instruction_interaction_claim,
-            blake_context: blake_context_interaction_claim,
-            builtins: builtins_interaction_claims,
-            pedersen_context: pedersen_context_interaction_claim,
-            poseidon_context: poseidon_context_interaction_claim,
-            memory_address_to_id: memory_address_to_id_interaction_claim,
-            memory_id_to_value: memory_id_to_value_interaction_claim,
-            range_checks: range_checks_interaction_claim,
-            verify_bitwise_xor_4: verify_bitwise_xor_4_interaction_claim,
-            verify_bitwise_xor_7: verify_bitwise_xor_7_interaction_claim,
-            verify_bitwise_xor_8: verify_bitwise_xor_8_interaction_claim,
-            verify_bitwise_xor_9: verify_bitwise_xor_9_interaction_claim,
-        }
+        (
+            CairoInteractionClaim {
+                opcodes: opcodes_interaction_claims,
+                verify_instruction: verify_instruction_interaction_claim,
+                blake_context: blake_context_interaction_claim,
+                builtins: builtins_interaction_claims,
+                pedersen_context: pedersen_context_interaction_claim,
+                poseidon_context: poseidon_context_interaction_claim,
+                memory_address_to_id: memory_address_to_id_interaction_claim,
+                memory_id_to_value: memory_id_to_value_interaction_claim,
+                range_checks: range_checks_interaction_claim,
+                verify_bitwise_xor_4: verify_bitwise_xor_4_interaction_claim,
+                verify_bitwise_xor_7: verify_bitwise_xor_7_interaction_claim,
+                verify_bitwise_xor_8: verify_bitwise_xor_8_interaction_claim,
+                verify_bitwise_xor_9: verify_bitwise_xor_9_interaction_claim,
+            },
+            memory_address_to_id_interaction_span,
+            id_to_big_interaction_spans_big,
+            id_to_big_interaction_span_small,
+        )
     }
 }

@@ -10,6 +10,7 @@ use num_traits::{One, Zero};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use stwo::core::fields::m31::{BaseField, M31};
 use stwo::core::poly::circle::CanonicCoset;
+use stwo::core::pcs::TreeSubspan;
 use stwo::prover::backend::simd::m31::{PackedBaseField, PackedM31, LOG_N_LANES, N_LANES};
 use stwo::prover::backend::simd::qm31::PackedQM31;
 use stwo::prover::backend::simd::SimdBackend;
@@ -122,7 +123,7 @@ impl ClaimGenerator {
         mut self,
         range_check_19_trace_generator: &range_check_19::ClaimGenerator,
         tree_builder: &mut impl TreeBuilder<SimdBackend>,
-    ) -> (Claim, InteractionClaimGenerator) {
+    ) -> (Claim, InteractionClaimGenerator, TreeSubspan) {
         // Convert multiplicities into packed vectors.
         let multiplicities_packed: Vec<PackedM31> = self.multiplicities.into_simd_vec();
 
@@ -264,7 +265,7 @@ impl ClaimGenerator {
                 CircleEvaluation::<SimdBackend, BaseField, BitReversedOrder>::new(domain, eval)
             })
             .collect_vec();
-        tree_builder.extend_evals(trace);
+        let base_span = tree_builder.extend_evals(trace);
 
         (
             Claim { log_size },
@@ -276,6 +277,7 @@ impl ClaimGenerator {
                 ids,
                 multiplicities,
             },
+            base_span,
         )
     }
 }
@@ -295,7 +297,7 @@ impl InteractionClaimGenerator {
         lookup_elements: &relations::MemoryAddressToId,
         address_relation: &relations::Address,
         range_check_19_relation: &relations::RangeCheck_19,
-    ) -> InteractionClaim {
+    ) -> (InteractionClaim, TreeSubspan) {
         let packed_size = self.ids[0].len();
         let log_size = packed_size.ilog2() + LOG_N_LANES;
         let mut logup_gen = LogupTraceGenerator::new(log_size);
@@ -340,9 +342,9 @@ impl InteractionClaimGenerator {
         }
 
         let (trace, claimed_sum) = logup_gen.finalize_last();
-        tree_builder.extend_evals(trace);
+        let interaction_span = tree_builder.extend_evals(trace);
 
-        InteractionClaim { claimed_sum }
+        (InteractionClaim { claimed_sum }, interaction_span)
     }
 }
 
