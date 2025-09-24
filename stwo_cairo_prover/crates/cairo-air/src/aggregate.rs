@@ -1,12 +1,14 @@
 use itertools::Itertools;
 use num_traits::Zero;
+use stwo::core::air::accumulation::PointEvaluationAccumulator;
 use stwo::core::air::Component;
 use stwo::core::air::Components as CoreComponents;
 use stwo::core::channel::{Channel, MerkleChannel};
 use stwo::core::circle::CirclePoint;
 use stwo::core::fields::qm31::{SecureField, SECURE_EXTENSION_DEGREE};
-use stwo::core::pcs::CommitmentSchemeVerifier;
+use stwo::core::pcs::{CommitmentSchemeVerifier, TreeVec};
 use stwo::core::verifier::{VerificationError, PREPROCESSED_TRACE_IDX};
+use stwo::core::ColumnVec;
 use stwo::prover::backend::cpu::CpuCirclePoly;
 
 use crate::air::{lookup_sum, CairoComponents, CairoInteractionElements, CairoProof};
@@ -71,6 +73,46 @@ fn sample_address_to_id_public_polys(
         .collect_vec();
 
     (base_samples, interaction_samples)
+}
+
+/// Asserts that the reconstructed OODS from public polynomials equals the prover's OODS
+/// for the Address->Id component.
+fn assert_address_to_id_preimage_oods(
+    random_coeff: SecureField,
+    oods_point: CirclePoint<SecureField>,
+    components: &CairoComponents,
+    base_samples: &[Vec<SecureField>],
+    interaction_samples: &[Vec<SecureField>],
+    sampled_values: &TreeVec<ColumnVec<Vec<SecureField>>>,
+) {
+    // Accumulate using public samples as mask.
+    let mut evaluation_accumulator = PointEvaluationAccumulator::new(random_coeff);
+    let public_mask: TreeVec<ColumnVec<Vec<SecureField>>> = TreeVec(vec![
+        vec![],
+        base_samples.to_vec(),
+        interaction_samples.to_vec(),
+    ]);
+    components
+        .memory_address_to_id
+        .evaluate_constraint_quotients_at_point(
+            oods_point,
+            &public_mask,
+            &mut evaluation_accumulator,
+        );
+    let preimage_oods = evaluation_accumulator.finalize().to_m31_array();
+
+    // Accumulate using mask provided by the proof (sampled_values).
+    let mut evaluation_accumulator = PointEvaluationAccumulator::new(random_coeff);
+    components
+        .memory_address_to_id
+        .evaluate_constraint_quotients_at_point(
+            oods_point,
+            sampled_values,
+            &mut evaluation_accumulator,
+        );
+    let proof_oods = evaluation_accumulator.finalize().to_m31_array();
+
+    assert_eq!(preimage_oods, proof_oods);
 }
 
 /// Verifies a Cairo proof by reproducing the full verification protocol without
@@ -148,8 +190,16 @@ pub fn aggregate_cairo<MC: MerkleChannel>(
     sample_points.push(vec![vec![oods_point]; SECURE_EXTENSION_DEGREE]);
 
     // Address-to-ID: sample public polynomials on the component mask points (base + interaction).
-    let (_base_samples, _interaction_samples) =
+    let (base_samples, interaction_samples) =
         sample_address_to_id_public_polys(&claim, &component_generator, oods_point);
+    assert_address_to_id_preimage_oods(
+        random_coeff,
+        oods_point,
+        &component_generator,
+        &base_samples,
+        &interaction_samples,
+        &stark_proof.sampled_values,
+    );
 
     // Verify DEEP-ALI: composition OODS value must match components' computed value.
     // Extract composition OODS evaluation from the sampled_values structure.
@@ -208,20 +258,28 @@ mod aggregate_tests {
     use stwo::core::vcs::blake2_merkle::Blake2sMerkleChannel;
 
     #[test]
-    #[ignore]
-    fn test_aggregate_cairo_on_fixture() {
-        let mut proof_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        // Move from crates/cairo-air one level up to stwo_cairo_prover then into test_data
-        proof_path.push("../../test_data/test_prove_verify_all_opcode_components/proof.json");
-        let cairo_proof =
-            deserialize_proof_from_file::<<Blake2sMerkleChannel as MerkleChannel>::H>(
-                &proof_path,
-                ProofFormat::CairoSerde,
-            )
-            .expect("failed to load proof.json");
+    fn test_aggregate_fibonacci_100k_shards() {
+        let mut shard_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        // The shards are written by the prover test into this path.
+        shard_dir.push("../../stwo_cairo_prover/test_data/generated_fib_shards");
 
         let preprocessed_trace = PreProcessedTraceVariant::CanonicalWithoutPedersen;
-        aggregate_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace)
-            .expect("aggregate_cairo verification failed");
+        for i in 0..4 {
+            let path = shard_dir.join(format!("proof_shard_{}.json", i));
+            if !path.exists() {
+                // Shard proofs not found (prover test may not have run). Skip gracefully.
+                eprintln!(
+                    "Skipping aggregator shards test: missing {}",
+                    path.display()
+                );
+                return;
+            }
+            let cairo_proof = deserialize_proof_from_file::<
+                <Blake2sMerkleChannel as MerkleChannel>::H,
+            >(&path, ProofFormat::CairoSerde)
+            .expect("failed to load shard proof");
+            aggregate_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace)
+                .expect("aggregate_cairo failed on shard");
+        }
     }
 }

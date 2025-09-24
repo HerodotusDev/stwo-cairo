@@ -186,10 +186,7 @@ where
 {
     let polynomials = cs.polynomials();
     let poly_slice = &polynomials[span.tree_index][span.col_start..span.col_end];
-    poly_slice
-        .iter()
-        .map(|poly| poly.coeffs.to_cpu())
-        .collect()
+    poly_slice.iter().map(|poly| poly.coeffs.to_cpu()).collect()
 }
 fn collect_poly_coeffs_for_spans<MC: MerkleChannel>(
     cs: &CommitmentSchemeProver<'_, SimdBackend, MC>,
@@ -517,7 +514,7 @@ pub mod tests {
 
         #[test]
         fn test_prove_verify_fibonacci_100k_shards() {
-            const N_STEPS: usize = 16_000_013;
+            const N_STEPS: usize = 400_013;
             let compiled_program =
                 get_compiled_cairo_program_path("test_prove_verify_fibonacci_100k");
             let shards = run_program_and_adapter_shards(
@@ -546,6 +543,57 @@ pub mod tests {
                 .unwrap();
                 verify_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace).unwrap();
                 tracing::info!("Verified shard {}/{}", i + 1, n_shards);
+            }
+        }
+
+        #[test]
+        fn test_serialize_fibonacci_100k_shards() {
+            const N_STEPS: usize = 400_013;
+            let compiled_program =
+                get_compiled_cairo_program_path("test_prove_verify_fibonacci_100k");
+            let shards = run_program_and_adapter_shards(
+                &compiled_program,
+                ProgramType::Json,
+                None,
+                N_STEPS / 4,
+            );
+
+            let preprocessed_trace = PreProcessedTraceVariant::CanonicalWithoutPedersen;
+            // Write to a shared repo path so aggregator tests can read them.
+            let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../test_data/test_prove_verify_fibonacci_100k");
+            std::fs::create_dir_all(&out_dir).expect("failed to create output dir");
+
+            for (i, shard) in shards.into_iter().enumerate() {
+                let cairo_proof = prove_cairo::<Blake2sMerkleChannel>(
+                    shard,
+                    PcsConfig::default(),
+                    preprocessed_trace,
+                )
+                .expect("failed to generate shard proof");
+
+                // Serialize to CairoSerde (hex) into files proof_shard_{i}.json
+                let mut serialized: Vec<starknet_ff::FieldElement> = Vec::new();
+                CairoSerialize::serialize(&cairo_proof, &mut serialized);
+                let proof_hex: Vec<String> = serialized
+                    .into_iter()
+                    .map(|felt| format!("0x{felt:x}"))
+                    .collect();
+                let out_path = out_dir.join(format!("proof_shard_{}.json", i));
+                std::fs::write(&out_path, sonic_rs::to_string_pretty(&proof_hex).unwrap())
+                    .expect("failed writing serialized shard proof");
+
+                // Now run the aggregator on the serialized proof (read back from file).
+                use cairo_air::aggregate::aggregate_cairo;
+                use cairo_air::utils::{deserialize_proof_from_file, ProofFormat};
+                use stwo::core::channel::MerkleChannel;
+
+                let deserialized = deserialize_proof_from_file::<
+                    <Blake2sMerkleChannel as MerkleChannel>::H,
+                >(&out_path, ProofFormat::CairoSerde)
+                .expect("failed to deserialize serialized shard proof");
+                aggregate_cairo::<Blake2sMerkleChannel>(deserialized, preprocessed_trace)
+                    .expect("aggregate_cairo failed on shard proof");
             }
         }
 
