@@ -68,6 +68,8 @@ pub fn dummy_interaction_lookup_elements() -> CairoInteractionElements {
         partial_ec_mul: LookupElementsDummyImpl::dummy(),
         pedersen_points_table: LookupElementsDummyImpl::dummy(),
         memory_address_to_id: LookupElementsDummyImpl::dummy(),
+        address: LookupElementsDummyImpl::dummy(),
+        id: LookupElementsDummyImpl::dummy(),
         memory_id_to_value: LookupElementsDummyImpl::dummy(),
         range_checks: RangeChecksInteractionElements {
             rc_6: LookupElementsDummyImpl::dummy(),

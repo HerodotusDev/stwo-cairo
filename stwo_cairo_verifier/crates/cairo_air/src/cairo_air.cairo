@@ -62,6 +62,10 @@ pub type Cube252Elements = LookupElements<20>;
 
 pub type MemoryAddressToIdElements = LookupElements<2>;
 
+pub type AddressElements = LookupElements<1>;
+
+pub type IdElements = LookupElements<1>;
+
 pub type MemoryIdToBigElements = LookupElements<29>;
 
 pub type OpcodesElements = LookupElements<3>;
@@ -283,6 +287,8 @@ pub struct CairoInteractionElements {
     pub poseidon_round_keys: PoseidonRoundKeysElements,
     pub range_check_felt_252_width_27: RangeCheckFelt252Width27Elements,
     pub memory_address_to_id: MemoryAddressToIdElements,
+    pub address: AddressElements,
+    pub id: IdElements,
     pub memory_id_to_value: MemoryIdToBigElements,
     pub range_checks: RangeChecksInteractionElements,
     pub verify_bitwise_xor_4: VerifyBitwiseXor_4Elements,
@@ -309,6 +315,8 @@ pub impl CairoInteractionElementsImpl of CairoInteractionElementsTrait {
             range_check_felt_252_width_27: LookupElementsImpl::draw(ref channel),
             partial_ec_mul: LookupElementsImpl::draw(ref channel),
             pedersen_points_table: LookupElementsImpl::draw(ref channel),
+            address: LookupElementsImpl::draw(ref channel),
+            id: LookupElementsImpl::draw(ref channel),
             memory_address_to_id: LookupElementsImpl::draw(ref channel),
             memory_id_to_value: LookupElementsImpl::draw(ref channel),
             range_checks: RangeChecksInteractionElementsImpl::draw(ref channel),
