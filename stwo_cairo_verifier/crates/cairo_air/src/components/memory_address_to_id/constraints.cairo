@@ -9,12 +9,15 @@ pub fn mask_points(
     trace_gen: CirclePointIndex,
     log_size: u32,
 ) {
-    preprocessed_column_set.insert(PreprocessedColumn::Seq(log_size));
     let point_offset_neg_1 = point.add_circle_point_m31(-trace_gen.mul(1).to_point());
 
+    // For each split: enabler, prev_address, curr_address, id, multiplicity.
     for _ in 0..MEMORY_ADDRESS_TO_ID_SPLIT {
-        trace_mask_points.append(array![point]); // ID.
-        trace_mask_points.append(array![point]); // Multiplicity.
+        trace_mask_points.append(array![point]);
+        trace_mask_points.append(array![point]);
+        trace_mask_points.append(array![point]);
+        trace_mask_points.append(array![point]);
+        trace_mask_points.append(array![point]);
     }
 
     for _ in 0..N_INTERACTION_TRACE_QM31_COLUMNS - 1 {
@@ -25,7 +28,7 @@ pub fn mask_points(
         interaction_trace_mask_points.append(array![point]);
     }
 
-    // The final cumulative logup sum.
+    // Final cumulative logup column with neighbor (-1, 0).
     interaction_trace_mask_points.append(array![point_offset_neg_1, point]);
     interaction_trace_mask_points.append(array![point_offset_neg_1, point]);
     interaction_trace_mask_points.append(array![point_offset_neg_1, point]);
@@ -36,8 +39,9 @@ pub fn mask_points(
 pub struct ConstraintParams {
     pub lookup_elements: @crate::MemoryAddressToIdElements,
     pub claimed_sum: QM31,
-    pub seq: QM31,
     pub column_size: M31,
+    pub address_lookup_elements: @crate::AddressElements,
+    pub range_check_19_lookup_elements: @crate::RangeCheck_19Elements,
 }
 
 /// Interpret the mask values as a single `QM31` value.
@@ -77,79 +81,93 @@ pub fn evaluate_constraints_at_point(
     random_coeff: QM31,
     domain_vanish_at_point_inv: QM31,
 ) {
-    let ConstraintParams { lookup_elements, claimed_sum, seq, column_size } = params;
+    let ConstraintParams { lookup_elements, claimed_sum, column_size, address_lookup_elements, range_check_19_lookup_elements } = params;
     let column_size: QM31 = column_size.into();
 
     let mut prev_cum_sum: QM31 = Zero::zero();
-    let mut address: QM31 = seq + m31(1).into();
 
-    // This loop executes `N_INTERACTION_TRACE_QM31_COLUMNS - 1` iterations, each enforcing a
-    // column-wise pairwise sum constraint. After this loop, a final constraint will handle both a
-    // row-wise sum and a column-wise pairwise sum.
-    for _ in 0..N_INTERACTION_TRACE_QM31_COLUMNS - 1 {
-        // Get two (id, multiplicity) from the trace.
-        let [id_0, multiplicity_0, id_1, multiplicity_1]: [Span<QM31>; 4] = (*trace_mask_values
-            .multi_pop_front()
-            .unwrap())
-            .unbox();
-        let [id_0]: [QM31; 1] = (*id_0.try_into().unwrap()).unbox();
-        let [multiplicity_0]: [QM31; 1] = (*multiplicity_0.try_into().unwrap()).unbox();
-        let [id_1]: [QM31; 1] = (*id_1.try_into().unwrap()).unbox();
-        let [multiplicity_1]: [QM31; 1] = (*multiplicity_1.try_into().unwrap()).unbox();
+    // This loop executes `MEMORY_ADDRESS_TO_ID_SPLIT - 1` iterations, each enforcing the
+    // 4 lookup sum constraints.
+    for _ in 0..MEMORY_ADDRESS_TO_ID_SPLIT - 1 {
+        // Get (enabler, prev_address, curr_address, id, multiplicity) from the trace.
+        let [enabler, prev_address, curr_address, id, multiplicity]: [Span<QM31>; 5] = (*trace_mask_values
+                .multi_pop_front()
+                .unwrap())
+                .unbox();
+        let [enabler]: [QM31; 1] = (*enabler.try_into().unwrap()).unbox();
+        let [prev_address]: [QM31; 1] = (*prev_address.try_into().unwrap()).unbox();
+        let [curr_address]: [QM31; 1] = (*curr_address.try_into().unwrap()).unbox();
+        let [id]: [QM31; 1] = (*id.try_into().unwrap()).unbox();
+        let [multiplicity]: [QM31; 1] = (*multiplicity.try_into().unwrap()).unbox();
 
-        // Get the corresponding cumulative logup sum from interaction trace.
-        let curr_cum_sum = as_qm31(interaction_mask_values.multi_pop_front::<4>().unwrap());
+        let combination_memory = lookup_elements.combine_qm31([curr_address, id]);
+        let combination_prev_address = address_lookup_elements.combine_qm31([prev_address]);
+        let combination_curr_address = address_lookup_elements.combine_qm31([curr_address]);
+        let combination_range_check = range_check_19_lookup_elements.combine_qm31([curr_address - prev_address - enabler]);
 
-        let combination_0 = lookup_elements.combine_qm31([address, id_0]);
-        address += column_size;
-
-        let combination_1 = lookup_elements.combine_qm31([address, id_1]);
-        address += column_size;
-
-        // Check that:
+        // Get the corresponding cumulative logup sum from interaction trace. And check that:
         // (current - prev) = (-multiplicity0 / intermediate0) + (-multiplicity1 / intermediate1)
         // = (-multiplicity0 * intermediate1 -multiplicity1 * intermediate0) / (intermediate0 *
         // intermediate1)
         // ==>
         // (current - prev) * (intermediate0 * intermediate1) =
         // -multiplicity0 * intermediate1 - multiplicity1 * intermediate0
-        let constraint_quotient = ((curr_cum_sum - prev_cum_sum) * combination_0 * combination_1
-            + multiplicity_0 * combination_1
-            + multiplicity_1 * combination_0)
+        let curr_cum_sum_1 = as_qm31(interaction_mask_values.multi_pop_front::<4>().unwrap());
+        let constraint_quotient_1 = ((curr_cum_sum_1 - prev_cum_sum) * combination_memory * combination_prev_address
+            + multiplicity * combination_prev_address
+            + enabler * combination_memory)
             * domain_vanish_at_point_inv;
-        sum = sum * random_coeff + constraint_quotient;
-        prev_cum_sum = curr_cum_sum;
+        sum = sum * random_coeff + constraint_quotient_1;
+        prev_cum_sum = curr_cum_sum_1;
+
+        let curr_cum_sum_2 = as_qm31(interaction_mask_values.multi_pop_front::<4>().unwrap());
+        let constraint_quotient_2 = ((curr_cum_sum_2 - prev_cum_sum) * combination_curr_address * combination_range_check
+            - enabler * combination_range_check
+            - combination_curr_address)
+            * domain_vanish_at_point_inv;
+        sum = sum * random_coeff + constraint_quotient_2;
+        prev_cum_sum = curr_cum_sum_2;
     }
 
-    let [id_0, multiplicity_0, id_1, multiplicity_1]: [Span<QM31>; 4] = (*trace_mask_values
-        .multi_pop_front()
-        .unwrap())
-        .unbox();
-    let [id_0]: [QM31; 1] = (*id_0.try_into().unwrap()).unbox();
-    let [multiplicity_0]: [QM31; 1] = (*multiplicity_0.try_into().unwrap()).unbox();
-    let [id_1]: [QM31; 1] = (*id_1.try_into().unwrap()).unbox();
-    let [multiplicity_1]: [QM31; 1] = (*multiplicity_1.try_into().unwrap()).unbox();
+    let [enabler, prev_address, curr_address, id, multiplicity]: [Span<QM31>; 5] = (*trace_mask_values
+            .multi_pop_front()
+            .unwrap())
+            .unbox();
+    let [enabler]: [QM31; 1] = (*enabler.try_into().unwrap()).unbox();
+    let [prev_address]: [QM31; 1] = (*prev_address.try_into().unwrap()).unbox();
+    let [curr_address]: [QM31; 1] = (*curr_address.try_into().unwrap()).unbox();
+    let [id]: [QM31; 1] = (*id.try_into().unwrap()).unbox();
+    let [multiplicity]: [QM31; 1] = (*multiplicity.try_into().unwrap()).unbox();
+
+    let combination_memory = lookup_elements.combine_qm31([curr_address, id]);
+    let combination_prev_address = address_lookup_elements.combine_qm31([prev_address]);
+    let combination_curr_address = address_lookup_elements.combine_qm31([curr_address]);
+    let combination_range_check = range_check_19_lookup_elements.combine_qm31([curr_address - prev_address - enabler]);
+
+    let curr_cum_sum_1 = as_qm31(interaction_mask_values.multi_pop_front::<4>().unwrap());
+    let constraint_quotient_1 = ((curr_cum_sum_1 - prev_cum_sum) * combination_memory * combination_prev_address
+        + multiplicity * combination_prev_address
+        + enabler * combination_memory)
+        * domain_vanish_at_point_inv;
+    sum = sum * random_coeff + constraint_quotient_1;
+    prev_cum_sum = curr_cum_sum_1;
 
     // Get the current and previous row's logup sum.
-    let [neg_1_cum_sum, curr_cum_sum] = as_neighboring_qm31s(
+    let [neg_1_cum_sum, curr_cum_sum_2] = as_neighboring_qm31s(
         interaction_mask_values.multi_pop_front::<4>().unwrap(),
     );
 
-    let combination_0 = lookup_elements.combine_qm31([address, id_0]);
-    address += column_size;
-    let combination_1 = lookup_elements.combine_qm31([address, id_1]);
-
     // Final constraint, Check that:
-    // (current_cum_sum - prev_cum_sum - neg_1_cum_sum + claimed_sum/column_size) *
-    // combination_0*combination_1 = -multiplicity0 * combination_1 - multiplicity1 * combination_0
-    let constraint_quotient = ((curr_cum_sum
+    // (current_cum_sum - prev_cum_sum_2 - neg_1_cum_sum + claimed_sum/column_size) *
+    // combination_curr_address*combination_range_check = -enabler * combination_range_check - combination_curr_address
+    let constraint_quotient = ((curr_cum_sum_2
         - prev_cum_sum
         - neg_1_cum_sum
         + claimed_sum * column_size.inverse().into())
-        * combination_0
-        * combination_1
-        + multiplicity_0 * combination_1
-        + multiplicity_1 * combination_0)
+        * combination_curr_address
+        * combination_range_check
+        - enabler * combination_range_check
+        - combination_curr_address)
         * domain_vanish_at_point_inv;
     sum = sum * random_coeff + constraint_quotient;
 }

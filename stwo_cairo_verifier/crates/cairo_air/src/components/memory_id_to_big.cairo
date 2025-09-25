@@ -32,11 +32,11 @@ pub const N_MULTIPLICITY_COLUMNS: usize = 1;
 
 pub const BIG_MULTIPLICITY_COLUMN_OFFSET: usize = N_M31_IN_FELT252;
 
-pub const BIG_N_COLUMNS: usize = N_M31_IN_FELT252 + N_MULTIPLICITY_COLUMNS;
+pub const BIG_N_COLUMNS: usize = N_M31_IN_FELT252 + (MEMORY_ID_SIZE + MEMORY_ID_SIZE) + N_MULTIPLICITY_COLUMNS + 1;
 
 pub const SMALL_MULTIPLICITY_COLUMN_OFFSET: usize = N_M31_IN_SMALL_FELT252;
 
-pub const SMALL_N_COLUMNS: usize = N_M31_IN_SMALL_FELT252 + N_MULTIPLICITY_COLUMNS;
+pub const SMALL_N_COLUMNS: usize = N_M31_IN_SMALL_FELT252 + (MEMORY_ID_SIZE + MEMORY_ID_SIZE) + N_MULTIPLICITY_COLUMNS + 1;
 
 pub const RELATION_USES_PER_ROW_BIG: [(felt252, u32); 8] = [
     ('RangeCheck_9_9', 2), ('RangeCheck_9_9_B', 2), ('RangeCheck_9_9_C', 2),
@@ -55,8 +55,7 @@ pub impl ClaimImpl of ClaimTrait<Claim> {
     fn log_sizes(self: @Claim) -> TreeArray<Span<u32>> {
         let Claim { big_log_sizes, small_log_size } = self;
 
-        let mut preprocessed_log_sizes = big_log_sizes.clone();
-        preprocessed_log_sizes.append(*small_log_size);
+        let mut preprocessed_log_sizes = array![];
 
         let mut trace_log_sizes = array![];
 
@@ -74,12 +73,12 @@ pub impl ClaimImpl of ClaimTrait<Claim> {
 
         // A lookup for every pair of limbs, and a yield of the value.
         for big_log_size in big_log_sizes.span() {
-            for _ in 0..(QM31_EXTENSION_DEGREE * ((N_M31_IN_FELT252.div_ceil(2) + 1).div_ceil(2))) {
+            for _ in 0..(QM31_EXTENSION_DEGREE * ((N_M31_IN_FELT252.div_ceil(2) + 4).div_ceil(2))) {
                 interaction_log_sizes.append(*big_log_size);
             }
         }
 
-        for _ in 0..(QM31_EXTENSION_DEGREE * (N_M31_IN_SMALL_FELT252.div_ceil(2) + 1).div_ceil(2)) {
+        for _ in 0..(QM31_EXTENSION_DEGREE * (N_M31_IN_SMALL_FELT252.div_ceil(2) + 4).div_ceil(2)) {
             interaction_log_sizes.append(*small_log_size);
         }
 
@@ -135,6 +134,8 @@ pub struct BigComponent {
     pub offset: u32,
     pub claimed_sum: QM31,
     pub lookup_elements: super::super::MemoryIdToBigElements,
+    pub id_lookup_elements: crate::IdElements,
+    pub range_check_19_lookup_elements: crate::RangeCheck_19Elements,
     pub range_9_9_lookup_elements: super::super::RangeCheck_9_9Elements,
     pub range_9_9_b_lookup_elements: super::super::RangeCheck_9_9_BElements,
     pub range_9_9_c_lookup_elements: super::super::RangeCheck_9_9_CElements,
@@ -158,6 +159,8 @@ pub impl NewBigComponentImpl of NewBigComponent {
             offset: offset,
             claimed_sum: claimed_sum,
             lookup_elements: interaction_elements.memory_id_to_value.clone(),
+            id_lookup_elements: interaction_elements.id.clone(),
+            range_check_19_lookup_elements: interaction_elements.range_checks.rc_19.clone(),
             range_9_9_lookup_elements: interaction_elements.range_checks.rc_9_9.clone(),
             range_9_9_b_lookup_elements: interaction_elements.range_checks.rc_9_9_b.clone(),
             range_9_9_c_lookup_elements: interaction_elements.range_checks.rc_9_9_c.clone(),
@@ -343,8 +346,9 @@ pub impl CairoBigComponentImpl of CairoComponent<BigComponent> {
             RangeCheck_9_9_h_alpha0: range_check_9_9_h_alpha_0,
             RangeCheck_9_9_h_alpha1: range_check_9_9_h_alpha_1,
             RangeCheck_9_9_h_z: *self.range_9_9_h_lookup_elements.z,
+            id_lookup_elements: self.id_lookup_elements,
+            range_check_19_lookup_elements: self.range_check_19_lookup_elements,
             claimed_sum: *self.claimed_sum,
-            seq: preprocessed_mask_values.get(PreprocessedColumn::Seq(*self.log_n_rows)),
         };
 
         let trace_domain = CanonicCosetImpl::new(*self.log_n_rows);
@@ -367,6 +371,8 @@ pub struct SmallComponent {
     pub log_n_rows: u32,
     pub claimed_sum: QM31,
     pub lookup_elements: super::super::MemoryIdToBigElements,
+    pub id_lookup_elements: crate::IdElements,
+    pub range_check_19_lookup_elements: crate::RangeCheck_19Elements,
     pub range_9_9_lookup_elements: super::super::RangeCheck_9_9Elements,
     pub range_9_9_b_lookup_elements: super::super::RangeCheck_9_9_BElements,
     pub range_9_9_c_lookup_elements: super::super::RangeCheck_9_9_CElements,
@@ -382,6 +388,8 @@ pub impl NewSmallComponentImpl of NewSmallComponent {
             log_n_rows: log_n_rows,
             claimed_sum: claimed_sum,
             lookup_elements: interaction_elements.memory_id_to_value.clone(),
+            id_lookup_elements: interaction_elements.id.clone(),
+            range_check_19_lookup_elements: interaction_elements.range_checks.rc_19.clone(),
             range_9_9_lookup_elements: interaction_elements.range_checks.rc_9_9.clone(),
             range_9_9_b_lookup_elements: interaction_elements.range_checks.rc_9_9_b.clone(),
             range_9_9_c_lookup_elements: interaction_elements.range_checks.rc_9_9_c.clone(),
@@ -483,8 +491,9 @@ pub impl CairoSmallComponentImpl of CairoComponent<SmallComponent> {
             RangeCheck_9_9_d_alpha0: range_check_9_9_d_alpha_0,
             RangeCheck_9_9_d_alpha1: range_check_9_9_d_alpha_1,
             RangeCheck_9_9_d_z: *self.range_9_9_d_lookup_elements.z,
+            id_lookup_elements: self.id_lookup_elements,
+            range_check_19_lookup_elements: self.range_check_19_lookup_elements,
             claimed_sum: *self.claimed_sum,
-            seq: preprocessed_mask_values.get(PreprocessedColumn::Seq(*self.log_n_rows)),
         };
 
         let trace_domain = CanonicCosetImpl::new(*self.log_n_rows);
