@@ -5,15 +5,15 @@ use stwo::core::air::Component;
 use stwo::core::air::Components as CoreComponents;
 use stwo::core::channel::{Channel, MerkleChannel};
 use stwo::core::circle::CirclePoint;
+use stwo::core::constraints::coset_vanishing;
 use stwo::core::fields::qm31::{SecureField, SECURE_EXTENSION_DEGREE};
+use stwo::core::fields::FieldExpOps;
 use stwo::core::pcs::{CommitmentSchemeVerifier, TreeVec};
 use stwo::core::poly::circle::CanonicCoset;
-use stwo::core::constraints::coset_vanishing;
-use stwo::core::fields::FieldExpOps;
-use stwo_constraint_framework::{FrameworkEval, PointEvaluator};
 use stwo::core::verifier::{VerificationError, PREPROCESSED_TRACE_IDX};
 use stwo::core::ColumnVec;
 use stwo::prover::backend::cpu::CpuCirclePoly;
+use stwo_constraint_framework::{FrameworkEval, PointEvaluator};
 
 use crate::air::{lookup_sum, CairoComponents, CairoInteractionElements, CairoProof};
 use crate::verifier::{verify_claim, CairoVerificationError, INTERACTION_POW_BITS};
@@ -80,7 +80,7 @@ fn sample_address_to_id_public_polys(
 }
 
 /// Asserts that the reconstructed OODS from public polynomials equals the prover's OODS
-/// for the Address->Id component.
+/// for the Address->Id component. This states that the sampled values are from the memory preimage.
 fn assert_address_to_id_preimage_oods(
     random_coeff: SecureField,
     oods_point: CirclePoint<SecureField>,
@@ -123,8 +123,7 @@ fn assert_address_to_id_preimage_oods(
     assert_eq!(preimage_oods, proof_oods);
 }
 
-/// Samples the public Id->Big polynomials (big and small tables) at the component mask points.
-/// Returns (big_base_samples, big_interaction_samples, small_base_samples, small_interaction_samples).
+/// Same as for Address->Id, but for Id->Big components.
 fn sample_id_to_big_public_polys(
     claim: &crate::air::CairoClaim,
     components: &CairoComponents,
@@ -154,10 +153,16 @@ fn sample_id_to_big_public_polys(
         let base_coeffs = &big_base_coeffs_all[i];
         let inter_coeffs = &big_inter_coeffs_all[i];
 
-        let base_polys: Vec<CpuCirclePoly> =
-            base_coeffs.iter().cloned().map(CpuCirclePoly::new).collect();
-        let inter_polys: Vec<CpuCirclePoly> =
-            inter_coeffs.iter().cloned().map(CpuCirclePoly::new).collect();
+        let base_polys: Vec<CpuCirclePoly> = base_coeffs
+            .iter()
+            .cloned()
+            .map(CpuCirclePoly::new)
+            .collect();
+        let inter_polys: Vec<CpuCirclePoly> = inter_coeffs
+            .iter()
+            .cloned()
+            .map(CpuCirclePoly::new)
+            .collect();
 
         let base_samples = base_polys
             .iter()
@@ -236,8 +241,7 @@ fn sample_id_to_big_public_polys(
     )
 }
 
-/// Asserts that the reconstructed OODS from public polynomials equals the prover's OODS
-/// for the Id->Big component (big traces and small trace).
+/// Same as for Address->Id, but for Id->Big components.
 fn assert_id_to_big_preimage_oods(
     random_coeff: SecureField,
     oods_point: CirclePoint<SecureField>,
@@ -258,8 +262,11 @@ fn assert_id_to_big_preimage_oods(
                 big_interaction_samples[i].iter().collect(),
             ]),
             &mut evaluation_accumulator,
-            coset_vanishing(CanonicCoset::new(big_comp.eval.log_size()).coset, oods_point)
-                .inverse(),
+            coset_vanishing(
+                CanonicCoset::new(big_comp.eval.log_size()).coset,
+                oods_point,
+            )
+            .inverse(),
             big_comp.eval.log_size(),
             big_comp.claimed_sum(),
         );
@@ -286,7 +293,10 @@ fn assert_id_to_big_preimage_oods(
             small_interaction_samples.iter().collect(),
         ]),
         &mut evaluation_accumulator,
-        coset_vanishing(CanonicCoset::new(components.memory_id_to_value.1.eval.log_size()).coset, oods_point)
+        coset_vanishing(
+            CanonicCoset::new(components.memory_id_to_value.1.eval.log_size()).coset,
+            oods_point,
+        )
         .inverse(),
         components.memory_id_to_value.1.eval.log_size(),
         components.memory_id_to_value.1.claimed_sum(),
@@ -308,9 +318,9 @@ fn assert_id_to_big_preimage_oods(
     assert_eq!(preimage_oods, proof_oods);
 }
 
-/// Verifies a Cairo proof by reproducing the full verification protocol without
-/// calling the stwo `verify` helper (unfolded for aggregation/experimentation).
-pub fn aggregate_cairo<MC: MerkleChannel>(
+/// Verifies a Cairo proof by reproducing the full verification protocol
+/// adding the oods check
+pub fn verify_cairo_shard<MC: MerkleChannel>(
     CairoProof {
         claim,
         interaction_pow,
@@ -395,12 +405,8 @@ pub fn aggregate_cairo<MC: MerkleChannel>(
     );
 
     // Id->Big components (big + small): sample and assert OODS equality.
-    let (
-        big_base_samples,
-        big_interaction_samples,
-        small_base_samples,
-        small_interaction_samples,
-    ) = sample_id_to_big_public_polys(&claim, &component_generator, oods_point);
+    let (big_base_samples, big_interaction_samples, small_base_samples, small_interaction_samples) =
+        sample_id_to_big_public_polys(&claim, &component_generator, oods_point);
     assert_id_to_big_preimage_oods(
         random_coeff,
         oods_point,
@@ -469,7 +475,7 @@ mod aggregate_tests {
     use stwo::core::vcs::blake2_merkle::Blake2sMerkleChannel;
 
     #[test]
-    fn test_aggregate_fibonacci_100k_shards() {
+    fn test_verify_fibonacci_100k_shards() {
         let mut shard_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         // The shards are written by the prover test into this path.
         shard_dir.push("../../stwo_cairo_prover/test_data/generated_fib_shards");
@@ -489,8 +495,8 @@ mod aggregate_tests {
                 <Blake2sMerkleChannel as MerkleChannel>::H,
             >(&path, ProofFormat::CairoSerde)
             .expect("failed to load shard proof");
-            aggregate_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace)
-                .expect("aggregate_cairo failed on shard");
+            verify_cairo_shard::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace)
+                .expect("verify_cairo_shard failed on shard");
         }
     }
 }
