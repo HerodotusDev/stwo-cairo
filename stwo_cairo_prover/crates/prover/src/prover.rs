@@ -558,7 +558,7 @@ pub mod tests {
                 N_STEPS / 4,
             );
 
-            let preprocessed_trace = PreProcessedTraceVariant::CanonicalWithoutPedersen;
+            let preprocessed_trace = PreProcessedTraceVariant::Canonical;
             // Write to a shared repo path so aggregator tests can read them.
             let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../test_data/test_prove_verify_fibonacci_100k");
@@ -567,7 +567,10 @@ pub mod tests {
             for (i, shard) in shards.into_iter().enumerate() {
                 let cairo_proof = prove_cairo::<Blake2sMerkleChannel>(
                     shard,
-                    PcsConfig::default(),
+                    PcsConfig {
+                        pow_bits: 26,
+                        fri_config: FriConfig::new(0, 1, 70),
+                    },
                     preprocessed_trace,
                 )
                 .expect("failed to generate shard proof");
@@ -584,7 +587,7 @@ pub mod tests {
                     .expect("failed writing serialized shard proof");
 
                 // Now run the aggregator on the serialized proof (read back from file).
-                use cairo_air::aggregate::aggregate_cairo;
+                use cairo_air::aggregate::verify_cairo_shard;
                 use cairo_air::utils::{deserialize_proof_from_file, ProofFormat};
                 use stwo::core::channel::MerkleChannel;
 
@@ -592,8 +595,8 @@ pub mod tests {
                     <Blake2sMerkleChannel as MerkleChannel>::H,
                 >(&out_path, ProofFormat::CairoSerde)
                 .expect("failed to deserialize serialized shard proof");
-                aggregate_cairo::<Blake2sMerkleChannel>(deserialized, preprocessed_trace)
-                    .expect("aggregate_cairo failed on shard proof");
+                verify_cairo_shard::<Blake2sMerkleChannel>(deserialized, preprocessed_trace)
+                    .expect("verify_cairo_shard failed on shard proof");
             }
         }
 
