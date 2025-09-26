@@ -55,7 +55,8 @@ pub impl ClaimImpl of ClaimTrait<Claim> {
     fn log_sizes(self: @Claim) -> TreeArray<Span<u32>> {
         let Claim { big_log_sizes, small_log_size } = self;
 
-        let mut preprocessed_log_sizes = array![];
+        let mut preprocessed_log_sizes = big_log_sizes.clone();
+        preprocessed_log_sizes.append(*small_log_size);
 
         let mut trace_log_sizes = array![];
 
