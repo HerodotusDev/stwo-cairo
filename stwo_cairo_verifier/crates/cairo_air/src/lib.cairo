@@ -208,11 +208,11 @@ pub fn verify_cairo(proof: CairoProof) {
     );
 
     let interaction_elements = CairoInteractionElementsImpl::draw(ref channel);
-    // assert!(
-    //     lookup_sum(@claim, @interaction_elements, @interaction_claim).is_zero(),
-    //     "{}",
-    //     CairoVerificationError::InvalidLogupSum,
-    // );
+    assert!(
+        lookup_sum(@claim, @interaction_elements, @interaction_claim).is_zero(),
+        "{}",
+        CairoVerificationError::InvalidLogupSum,
+    );
 
     interaction_claim.mix_into(ref channel);
     commitment_scheme

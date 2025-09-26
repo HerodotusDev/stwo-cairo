@@ -9,6 +9,7 @@ pub fn mask_points(
     trace_gen: CirclePointIndex,
     log_size: u32,
 ) {
+
     let point_offset_neg_1 = point.add_circle_point_m31(-trace_gen.mul(1).to_point());
 
     // For each split: enabler, prev_address, curr_address, id, multiplicity.
