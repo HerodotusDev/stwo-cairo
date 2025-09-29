@@ -467,6 +467,41 @@ pub fn verify_cairo_shard<MC: MerkleChannel>(
         .map_err(CairoVerificationError::Stark)
 }
 
+/// Verifies two Cairo shards and checks state continuity between them.
+/// Continuity condition: overall_final_state of the first shard equals
+/// overall_initial_state of the second shard (pc, ap, fp). If the optional
+/// overall states are not present, falls back to final_state/initial_state.
+pub fn verify_two_cairo_shards<MC: MerkleChannel>(
+    left: CairoProof<MC::H>,
+    right: CairoProof<MC::H>,
+    preprocessed_trace: PreProcessedTraceVariant,
+) -> Result<(), CairoVerificationError> {
+    // Extract boundary states (pc, ap, fp) with shard-aware fallback before moving proofs.
+    let (left_pc, left_ap, left_fp) = {
+        let s = &left.claim.public_data.final_state;
+        (s.pc, s.ap, s.fp)
+    };
+    let (right_pc, right_ap, right_fp) = {
+        let s = &right.claim.public_data.initial_state;
+        (s.pc, s.ap, s.fp)
+    };
+
+    // Verify each shard individually (includes all OODS checks).
+    verify_cairo_shard::<MC>(left, preprocessed_trace)?;
+    verify_cairo_shard::<MC>(right, preprocessed_trace)?;
+
+    // Check pc/ap/fp continuity between shards.
+    if left_pc != right_pc || left_ap != right_ap || left_fp != right_fp {
+        return Err(CairoVerificationError::Stark(
+            VerificationError::InvalidStructure(
+                "Shard state continuity failed (left.final != right.initial)".into(),
+            ),
+        ));
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod aggregate_tests {
     use super::*;
@@ -498,5 +533,32 @@ mod aggregate_tests {
             verify_cairo_shard::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace)
                 .expect("verify_cairo_shard failed on shard");
         }
+    }
+
+    #[test]
+    fn test_aggregate_fibonacci() {
+        let mut shard_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        // The shards are written by the prover test into this path.
+        shard_dir.push("../../test_data/test_prove_verify_fibonacci_100k");
+
+        let left_path = shard_dir.join("proof_shard_0.json");
+        let right_path = shard_dir.join("proof_shard_1.json");
+
+        let left = deserialize_proof_from_file::<<Blake2sMerkleChannel as MerkleChannel>::H>(
+            &left_path,
+            ProofFormat::CairoSerde,
+        )
+        .expect("failed to load shard 0 proof");
+
+        let right = deserialize_proof_from_file::<<Blake2sMerkleChannel as MerkleChannel>::H>(
+            &right_path,
+            ProofFormat::CairoSerde,
+        )
+        .expect("failed to load shard 1 proof");
+
+        // Serialized shard proofs were created with Canonical preprocessed trace.
+        let preprocessed_trace = PreProcessedTraceVariant::Canonical;
+        verify_two_cairo_shards::<Blake2sMerkleChannel>(left, right, preprocessed_trace)
+            .expect("verify_two_cairo_shards failed on shard pair 0->1");
     }
 }
