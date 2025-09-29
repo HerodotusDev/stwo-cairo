@@ -52,10 +52,48 @@ use stwo_constraint_framework::{
 use stwo_verifier_core::channel::Channel;
 use stwo_verifier_core::circle::CirclePoint;
 use stwo_verifier_core::fields::qm31::QM31;
+use stwo_verifier_core::fields::m31::M31;
 use stwo_verifier_core::pcs::verifier::CommitmentSchemeVerifierImpl;
 use stwo_verifier_core::utils::{ArrayImpl, OptionImpl, pow2};
 use stwo_verifier_core::verifier::Air;
 use stwo_verifier_core::{ColumnArray, ColumnSpan, TreeArray, TreeSpan};
+use stwo_verifier_core::circle::CirclePointTrait;
+use stwo_cairo_air::MemoryPolyCoeffs;
+
+// Local circle polynomial evaluation over the circle basis, used to sample
+// public Address->Id polynomials at mask points.
+fn fold_mixed(
+    values: @Array<M31>, folding_factors: @Array<QM31>, index: usize, level: usize, n: usize,
+) -> QM31 {
+    if n == 1 {
+        return (*values[index]).into();
+    }
+    let lhs_val = fold_mixed(values, folding_factors, index, level + 1, n / 2);
+    let rhs_val = fold_mixed(values, folding_factors, index + n / 2, level + 1, n / 2);
+    lhs_val + rhs_val * *folding_factors[level]
+}
+
+fn circle_eval_at_point(coeffs: @Array<M31>, log_size: u32, point: CirclePoint<QM31>) -> QM31 {
+    if log_size == 0_u32 {
+        return (*coeffs[0]).into();
+    }
+    let mut factors: Array<QM31> = array![];
+    factors.append(point.y);
+    let mut x = point.x;
+    let mut i: u32 = 1_u32;
+    while i < log_size {
+        factors.append(x);
+        x = CirclePointTrait::double_x(x);
+        i += 1_u32;
+    }
+    // reverse
+    let mut rev_factors: Array<QM31> = array![];
+    let mut span = factors.span();
+    while let Some(v) = span.pop_back() {
+        rev_factors.append(*v);
+    }
+    fold_mixed(coeffs, @rev_factors, 0, 0, coeffs.len())
+}
 
 
 pub type Cube252Elements = LookupElements<20>;
@@ -333,6 +371,8 @@ pub impl CairoInteractionElementsImpl of CairoInteractionElementsTrait {
 #[derive(Drop)]
 #[cfg(not(feature: "poseidon252_verifier"))]
 pub struct CairoAir {
+    // Public polynomial coefficients used to recompute mask values for public tables.
+    memory_poly_coeffs: @MemoryPolyCoeffs,
     opcodes: OpcodeComponents,
     verify_instruction: components::verify_instruction::Component,
     blake_context: BlakeContextComponents,
@@ -457,6 +497,7 @@ pub impl CairoAirNewImpl of CairoAirNewTrait {
         );
 
         CairoAir {
+            memory_poly_coeffs: cairo_claim.public_data.memory_poly_coeffs,
             opcodes: opcode_components,
             verify_instruction: verifyinstruction_component,
             blake_context: blake_context_component,
@@ -478,6 +519,7 @@ pub impl CairoAirNewImpl of CairoAirNewTrait {
 pub impl CairoAirImpl of Air<CairoAir> {
     fn composition_log_degree_bound(self: @CairoAir) -> u32 {
         let CairoAir {
+            memory_poly_coeffs: _,
             opcodes,
             verify_instruction,
             blake_context,
@@ -530,6 +572,7 @@ pub impl CairoAirImpl of Air<CairoAir> {
         let mut trace_mask_points = array![];
         let mut interaction_trace_mask_points = array![];
         let CairoAir {
+            memory_poly_coeffs: _,
             opcodes,
             verify_instruction,
             blake_context,
@@ -678,6 +721,7 @@ pub impl CairoAirImpl of Air<CairoAir> {
             preprocessed_mask_values, PREPROCESSED_COLUMNS.span(),
         );
         let CairoAir {
+            memory_poly_coeffs: _,
             opcodes,
             verify_instruction,
             blake_context,
@@ -825,11 +869,351 @@ pub impl CairoAirImpl of Air<CairoAir> {
             );
         sum
     }
+
+
+    // Asserts that the reconstructed OODS from public Id->Big polynomials equals the
+    // prover-supplied OODS for all Id->Big components (big + small).
+    fn assert_id_to_big_preimage_oods(
+        self: @CairoAir,
+        point: CirclePoint<QM31>,
+        mask_values: TreeSpan<ColumnSpan<Span<QM31>>>,
+        random_coeff: QM31,
+    ) {
+        // 1) Build public samples for big + small components.
+        let (
+            big_base_samples_all,
+            big_inter_samples_all,
+            small_base_samples,
+            small_inter_samples,
+        ) = sample_id_to_big_public_polys(self, point);
+
+        // Empty preprocessed mask values (not used by this component).
+        let mut empty_pre_cols_arrays: Array<Array<QM31>> = array![];
+        for _ in PREPROCESSED_COLUMNS.span() { empty_pre_cols_arrays.append(array![]); }
+        let mut empty_pre_cols: Array<Span<QM31>> = array![];
+        for arr in empty_pre_cols_arrays.span() { empty_pre_cols.append(arr.span()); }
+        let mut preprocessed_mask_values_dummy =
+            PreprocessedMaskValuesImpl::new(empty_pre_cols.span(), PREPROCESSED_COLUMNS.span());
+
+        // 2) Extract the proof-provided spans only for Id->Big components from mask_values.
+        let [
+            _pre_mask,
+            mut trace_mask_values,
+            mut interaction_mask_values,
+            _composition_mask,
+        ]: [ColumnSpan<Span<QM31>>; 4] = (*mask_values.try_into().unwrap()).unbox();
+
+        // Skip preceding components by mirroring mask_points ordering up to memory_address_to_id.
+        let mut set: PreprocessedColumnSet = Default::default();
+        let mut t_points: ColumnArray<Array<CirclePoint<QM31>>> = array![];
+        let mut i_points: ColumnArray<Array<CirclePoint<QM31>>> = array![];
+        let mut skip_t: usize = 0;
+        let mut skip_i: usize = 0;
+
+        // opcodes
+        skip_t = t_points.len(); skip_i = i_points.len();
+        self.opcodes.mask_points(ref set, ref t_points, ref i_points, point);
+        let mut d_t = t_points.len() - skip_t; let mut d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // verify_instruction
+        skip_t = t_points.len(); skip_i = i_points.len();
+        self.verify_instruction.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t; d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // blake_context
+        skip_t = t_points.len(); skip_i = i_points.len();
+        self.blake_context.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t; d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // builtins
+        skip_t = t_points.len(); skip_i = i_points.len();
+        self.builtins.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t; d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // pedersen_context
+        skip_t = t_points.len(); skip_i = i_points.len();
+        self.pedersen_context.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t; d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // poseidon_context
+        skip_t = t_points.len(); skip_i = i_points.len();
+        self.poseidon_context.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t; d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // memory_address_to_id
+        skip_t = t_points.len(); skip_i = i_points.len();
+        self.memory_address_to_id.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t; d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // Now process big components sequentially.
+        let (big_components, small_component) = self.memory_id_to_value;
+        let mut idx: usize = 0;
+        for big_comp in big_components.span() {
+            // Prepare public samples for this component.
+            let mut base_spans: Array<Span<QM31>> = array![];
+            let mut inter_spans: Array<Span<QM31>> = array![];
+            let base_cols = big_base_samples_all[idx];
+            for vals in base_cols.span() { base_spans.append(vals.span()); }
+            let inter_cols = big_inter_samples_all[idx];
+            for vals in inter_cols.span() { inter_spans.append(vals.span()); }
+
+            // Evaluate OODS using public samples for this component.
+            let mut preimage_sum: QM31 = Zero::zero();
+            let mut base_spans_span = base_spans.span();
+            let mut inter_spans_span = inter_spans.span();
+            big_comp.evaluate_constraints_at_point(
+                ref preimage_sum,
+                ref preprocessed_mask_values_dummy,
+                ref base_spans_span,
+                ref inter_spans_span,
+                random_coeff,
+                point,
+            );
+
+            // Extract proof-provided values for this big component and evaluate.
+            skip_t = t_points.len(); skip_i = i_points.len();
+            big_comp.mask_points(ref set, ref t_points, ref i_points, point);
+            d_t = t_points.len() - skip_t; d_i = i_points.len() - skip_i;
+            let mut trace_comp_vals: Array<Span<QM31>> = array![];
+            let mut inter_comp_vals: Array<Span<QM31>> = array![];
+            for _ in 0..d_t { trace_comp_vals.append(*trace_mask_values.pop_front().unwrap()); }
+            for _ in 0..d_i { inter_comp_vals.append(*interaction_mask_values.pop_front().unwrap()); }
+
+            let mut proof_sum: QM31 = Zero::zero();
+            let mut trace_comp_vals_span = trace_comp_vals.span();
+            let mut inter_comp_vals_span = inter_comp_vals.span();
+            big_comp.evaluate_constraints_at_point(
+                ref proof_sum,
+                ref preprocessed_mask_values_dummy,
+                ref trace_comp_vals_span,
+                ref inter_comp_vals_span,
+                random_coeff,
+                point,
+            );
+
+            assert!(
+                preimage_sum == proof_sum,
+                "{}",
+                stwo_verifier_core::verifier::VerificationError::OodsNotMatching,
+            );
+
+            idx += 1_usize;
+        }
+
+        // Small component.
+        let mut base_spans: Array<Span<QM31>> = array![];
+        let mut inter_spans: Array<Span<QM31>> = array![];
+        for vals in small_base_samples.span() { base_spans.append(vals.span()); }
+        for vals in small_inter_samples.span() { inter_spans.append(vals.span()); }
+
+        let mut preimage_sum: QM31 = Zero::zero();
+        let mut base_spans_span = base_spans.span();
+        let mut inter_spans_span = inter_spans.span();
+        small_component.evaluate_constraints_at_point(
+            ref preimage_sum,
+            ref preprocessed_mask_values_dummy,
+            ref base_spans_span,
+            ref inter_spans_span,
+            random_coeff,
+            point,
+        );
+
+        // Extract proof-provided values for small component.
+        skip_t = t_points.len(); skip_i = i_points.len();
+        small_component.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t; d_i = i_points.len() - skip_i;
+        let mut trace_comp_vals: Array<Span<QM31>> = array![];
+        let mut inter_comp_vals: Array<Span<QM31>> = array![];
+        for _ in 0..d_t { trace_comp_vals.append(*trace_mask_values.pop_front().unwrap()); }
+        for _ in 0..d_i { inter_comp_vals.append(*interaction_mask_values.pop_front().unwrap()); }
+
+        let mut proof_sum: QM31 = Zero::zero();
+        let mut trace_comp_vals_span = trace_comp_vals.span();
+        let mut inter_comp_vals_span = inter_comp_vals.span();
+        small_component.evaluate_constraints_at_point(
+            ref proof_sum,
+            ref preprocessed_mask_values_dummy,
+            ref trace_comp_vals_span,
+            ref inter_comp_vals_span,
+            random_coeff,
+            point,
+        );
+
+        assert!(
+            preimage_sum == proof_sum,
+            "{}",
+            stwo_verifier_core::verifier::VerificationError::OodsNotMatching,
+        );
+    }
+
+    fn assert_address_to_id_preimage_oods(
+        self: @CairoAir,
+        point: CirclePoint<QM31>,
+        mask_values: TreeSpan<ColumnSpan<Span<QM31>>>,
+        random_coeff: QM31,
+    ) {
+        // 1) Build public samples.
+        let (base_samples, inter_samples) = sample_address_to_id_public_polys(self, point);
+
+        // Convert public samples to spans-of-spans.
+        let mut base_spans: Array<Span<QM31>> = array![];
+        for vals in base_samples.span() {
+            base_spans.append(vals.span());
+        }
+        let mut inter_spans: Array<Span<QM31>> = array![];
+        for vals in inter_samples.span() {
+            inter_spans.append(vals.span());
+        }
+
+        // Empty preprocessed mask values (not used by this component).
+        let mut empty_pre_cols_arrays: Array<Array<QM31>> = array![];
+        for _ in PREPROCESSED_COLUMNS.span() {
+            empty_pre_cols_arrays.append(array![]);
+        }
+        let mut empty_pre_cols: Array<Span<QM31>> = array![];
+        for arr in empty_pre_cols_arrays.span() {
+            empty_pre_cols.append(arr.span());
+        }
+        let mut preprocessed_mask_values_dummy =
+            PreprocessedMaskValuesImpl::new(empty_pre_cols.span(), PREPROCESSED_COLUMNS.span());
+
+        // 2) Evaluate OODS using public samples.
+        let mut preimage_sum: QM31 = Zero::zero();
+        let mut base_spans_span = base_spans.span();
+        let mut inter_spans_span = inter_spans.span();
+        self.memory_address_to_id.evaluate_constraints_at_point(
+            ref preimage_sum,
+            ref preprocessed_mask_values_dummy,
+            ref base_spans_span,
+            ref inter_spans_span,
+            random_coeff,
+            point,
+        );
+
+        // 3) Extract the proof-provided spans only for this component from mask_values and evaluate.
+        let [
+            _pre_mask,
+            mut trace_mask_values,
+            mut interaction_mask_values,
+            _composition_mask,
+        ]: [ColumnSpan<Span<QM31>>; 4] =
+            (*mask_values
+            .try_into()
+            .unwrap())
+            .unbox();
+
+        // Skip preceding components by mirroring mask_points ordering.
+        let mut set: PreprocessedColumnSet = Default::default();
+        let mut t_points: ColumnArray<Array<CirclePoint<QM31>>> = array![];
+        let mut i_points: ColumnArray<Array<CirclePoint<QM31>>> = array![];
+        let mut skip_t: usize = 0;
+        let mut skip_i: usize = 0;
+
+        // opcodes
+        skip_t = t_points.len();
+        skip_i = i_points.len();
+        self.opcodes.mask_points(ref set, ref t_points, ref i_points, point);
+        let mut d_t = t_points.len() - skip_t;
+        let mut d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // verify_instruction
+        skip_t = t_points.len();
+        skip_i = i_points.len();
+        self.verify_instruction.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t;
+        d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // blake_context
+        skip_t = t_points.len();
+        skip_i = i_points.len();
+        self.blake_context.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t;
+        d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // builtins
+        skip_t = t_points.len();
+        skip_i = i_points.len();
+        self.builtins.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t;
+        d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // pedersen_context
+        skip_t = t_points.len();
+        skip_i = i_points.len();
+        self.pedersen_context.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t;
+        d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // poseidon_context
+        skip_t = t_points.len();
+        skip_i = i_points.len();
+        self.poseidon_context.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t;
+        d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // memory_address_to_id: capture spans for this component.
+        skip_t = t_points.len();
+        skip_i = i_points.len();
+        self.memory_address_to_id.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t;
+        d_i = i_points.len() - skip_i;
+        let mut trace_comp_vals: Array<Span<QM31>> = array![];
+        let mut inter_comp_vals: Array<Span<QM31>> = array![];
+        for _ in 0..d_t { trace_comp_vals.append(*trace_mask_values.pop_front().unwrap()); }
+        for _ in 0..d_i { inter_comp_vals.append(*interaction_mask_values.pop_front().unwrap()); }
+
+        // Evaluate proof OODS for this component using proof-provided values.
+        let mut proof_sum: QM31 = Zero::zero();
+        let mut trace_comp_vals_span = trace_comp_vals.span();
+        let mut inter_comp_vals_span = inter_comp_vals.span();
+        self.memory_address_to_id.evaluate_constraints_at_point(
+            ref proof_sum,
+            ref preprocessed_mask_values_dummy,
+            ref trace_comp_vals_span,
+            ref inter_comp_vals_span,
+            random_coeff,
+            point,
+        );
+
+        assert!(
+            preimage_sum == proof_sum,
+            "{}",
+            stwo_verifier_core::verifier::VerificationError::OodsNotMatching,
+        );
+    }
 }
 
 #[derive(Drop)]
 #[cfg(feature: "poseidon252_verifier")]
 pub struct CairoAir {
+    // Public polynomial coefficients used to recompute mask values for public tables.
+    memory_poly_coeffs: @MemoryPolyCoeffs,
     opcodes: OpcodeComponents,
     verify_instruction: components::verify_instruction::Component,
     blake_context: BlakeContextComponents,
@@ -944,6 +1328,7 @@ pub impl CairoAirNewImpl of CairoAirNewTrait {
         );
 
         CairoAir {
+            memory_poly_coeffs: cairo_claim.public_data.memory_poly_coeffs,
             opcodes: opcode_components,
             verify_instruction: verifyinstruction_component,
             blake_context: blake_context_component,
@@ -963,6 +1348,7 @@ pub impl CairoAirNewImpl of CairoAirNewTrait {
 pub impl CairoAirImpl of Air<CairoAir> {
     fn composition_log_degree_bound(self: @CairoAir) -> u32 {
         let CairoAir {
+            memory_poly_coeffs: _,
             opcodes,
             verify_instruction,
             blake_context,
@@ -1011,6 +1397,7 @@ pub impl CairoAirImpl of Air<CairoAir> {
         let mut trace_mask_points = array![];
         let mut interaction_trace_mask_points = array![];
         let CairoAir {
+            memory_poly_coeffs: _,
             opcodes,
             verify_instruction,
             blake_context,
@@ -1144,6 +1531,7 @@ pub impl CairoAirImpl of Air<CairoAir> {
         );
 
         let CairoAir {
+            memory_poly_coeffs: _,
             opcodes,
             verify_instruction,
             blake_context,
@@ -1270,6 +1658,289 @@ pub impl CairoAirImpl of Air<CairoAir> {
             );
         sum
     }
+
+
+    // Asserts that the reconstructed OODS from public Id->Big polynomials equals the
+    // prover-supplied OODS for all Id->Big components (big + small).
+    fn assert_id_to_big_preimage_oods(
+        self: @CairoAir,
+        point: CirclePoint<QM31>,
+        mask_values: TreeSpan<ColumnSpan<Span<QM31>>>,
+        random_coeff: QM31,
+    ) {
+        // 1) Build public samples for big + small components.
+        let (
+            big_base_samples_all,
+            big_inter_samples_all,
+            small_base_samples,
+            small_inter_samples,
+        ) = sample_id_to_big_public_polys(self, point);
+
+        // Empty preprocessed mask values.
+        let mut empty_pre_cols_arrays: Array<Array<QM31>> = array![];
+        for _ in PREPROCESSED_COLUMNS.span() { empty_pre_cols_arrays.append(array![]); }
+        let mut empty_pre_cols: Array<Span<QM31>> = array![];
+        for arr in empty_pre_cols_arrays.span() { empty_pre_cols.append(arr.span()); }
+        let mut preprocessed_mask_values_dummy =
+            PreprocessedMaskValuesImpl::new(empty_pre_cols.span(), PREPROCESSED_COLUMNS.span());
+
+        // 2) Extract proof-provided spans for Id->Big components from mask_values.
+        let [
+            _pre_mask,
+            mut trace_mask_values,
+            mut interaction_mask_values,
+            _composition_mask,
+        ]: [ColumnSpan<Span<QM31>>; 4] = (*mask_values.try_into().unwrap()).unbox();
+
+        // Skip preceding components up to memory_address_to_id.
+        let mut set: PreprocessedColumnSet = Default::default();
+        let mut t_points: ColumnArray<Array<CirclePoint<QM31>>> = array![];
+        let mut i_points: ColumnArray<Array<CirclePoint<QM31>>> = array![];
+        let mut skip_t: usize = 0;
+        let mut skip_i: usize = 0;
+
+        // opcodes
+        skip_t = t_points.len(); skip_i = i_points.len();
+        self.opcodes.mask_points(ref set, ref t_points, ref i_points, point);
+        let mut d_t = t_points.len() - skip_t; let mut d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // verify_instruction
+        skip_t = t_points.len(); skip_i = i_points.len();
+        self.verify_instruction.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t; d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // blake_context
+        skip_t = t_points.len(); skip_i = i_points.len();
+        self.blake_context.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t; d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // builtins
+        skip_t = t_points.len(); skip_i = i_points.len();
+        self.builtins.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t; d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // memory_address_to_id
+        skip_t = t_points.len(); skip_i = i_points.len();
+        self.memory_address_to_id.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t; d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // Process big components.
+        let (big_components, small_component) = self.memory_id_to_value;
+        let mut idx: usize = 0;
+        for big_comp in big_components.span() {
+            // Public samples for this component.
+            let mut base_spans: Array<Span<QM31>> = array![];
+            let mut inter_spans: Array<Span<QM31>> = array![];
+            let base_cols = big_base_samples_all[idx];
+            for vals in base_cols.span() { base_spans.append(vals.span()); }
+            let inter_cols = big_inter_samples_all[idx];
+            for vals in inter_cols.span() { inter_spans.append(vals.span()); }
+
+            let mut preimage_sum: QM31 = Zero::zero();
+            let mut base_spans_span = base_spans.span();
+            let mut inter_spans_span = inter_spans.span();
+            big_comp.evaluate_constraints_at_point(
+                ref preimage_sum,
+                ref preprocessed_mask_values_dummy,
+                ref base_spans_span,
+                ref inter_spans_span,
+                random_coeff,
+                point,
+            );
+
+            // Proof-provided values for this big component.
+            skip_t = t_points.len(); skip_i = i_points.len();
+            big_comp.mask_points(ref set, ref t_points, ref i_points, point);
+            d_t = t_points.len() - skip_t; d_i = i_points.len() - skip_i;
+            let mut trace_comp_vals: Array<Span<QM31>> = array![];
+            let mut inter_comp_vals: Array<Span<QM31>> = array![];
+            for _ in 0..d_t { trace_comp_vals.append(*trace_mask_values.pop_front().unwrap()); }
+            for _ in 0..d_i { inter_comp_vals.append(*interaction_mask_values.pop_front().unwrap()); }
+
+            let mut proof_sum: QM31 = Zero::zero();
+            let mut trace_comp_vals_span = trace_comp_vals.span();
+            let mut inter_comp_vals_span = inter_comp_vals.span();
+            big_comp.evaluate_constraints_at_point(
+                ref proof_sum,
+                ref preprocessed_mask_values_dummy,
+                ref trace_comp_vals_span,
+                ref inter_comp_vals_span,
+                random_coeff,
+                point,
+            );
+
+            assert!(
+                preimage_sum == proof_sum,
+                "{}",
+                stwo_verifier_core::verifier::VerificationError::OodsNotMatching,
+            );
+
+            idx += 1_usize;
+        }
+
+        // Small component.
+        let mut base_spans: Array<Span<QM31>> = array![];
+        let mut inter_spans: Array<Span<QM31>> = array![];
+        for vals in small_base_samples.span() { base_spans.append(vals.span()); }
+        for vals in small_inter_samples.span() { inter_spans.append(vals.span()); }
+
+        let mut preimage_sum: QM31 = Zero::zero();
+        let mut base_spans_span = base_spans.span();
+        let mut inter_spans_span = inter_spans.span();
+        small_component.evaluate_constraints_at_point(
+            ref preimage_sum,
+            ref preprocessed_mask_values_dummy,
+            ref base_spans_span,
+            ref inter_spans_span,
+            random_coeff,
+            point,
+        );
+
+        // Extract proof-provided values for small component.
+        skip_t = t_points.len(); skip_i = i_points.len();
+        small_component.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t; d_i = i_points.len() - skip_i;
+        let mut trace_comp_vals: Array<Span<QM31>> = array![];
+        let mut inter_comp_vals: Array<Span<QM31>> = array![];
+        for _ in 0..d_t { trace_comp_vals.append(*trace_mask_values.pop_front().unwrap()); }
+        for _ in 0..d_i { inter_comp_vals.append(*interaction_mask_values.pop_front().unwrap()); }
+
+        let mut proof_sum: QM31 = Zero::zero();
+        let mut trace_comp_vals_span = trace_comp_vals.span();
+        let mut inter_comp_vals_span = inter_comp_vals.span();
+        small_component.evaluate_constraints_at_point(
+            ref proof_sum,
+            ref preprocessed_mask_values_dummy,
+            ref trace_comp_vals_span,
+            ref inter_comp_vals_span,
+            random_coeff,
+            point,
+        );
+
+        assert!(
+            preimage_sum == proof_sum,
+            "{}",
+            stwo_verifier_core::verifier::VerificationError::OodsNotMatching,
+        );
+    }
+
+    fn assert_address_to_id_preimage_oods(
+        self: @CairoAir,
+        point: CirclePoint<QM31>,
+        mask_values: TreeSpan<ColumnSpan<Span<QM31>>>,
+        random_coeff: QM31,
+    ) {
+        // 1) Build public samples.
+        let (base_samples, inter_samples) = sample_address_to_id_public_polys(self, point);
+
+        // Convert public samples to spans-of-spans.
+        let mut base_spans: Array<Span<QM31>> = array![];
+        for vals in base_samples.span() { base_spans.append(vals.span()); }
+        let mut inter_spans: Array<Span<QM31>> = array![];
+        for vals in inter_samples.span() { inter_spans.append(vals.span()); }
+
+        // Empty preprocessed mask values.
+        let mut empty_pre_cols_arrays: Array<Array<QM31>> = array![];
+        for _ in PREPROCESSED_COLUMNS.span() { empty_pre_cols_arrays.append(array![]); }
+        let mut empty_pre_cols: Array<Span<QM31>> = array![];
+        for arr in empty_pre_cols_arrays.span() { empty_pre_cols.append(arr.span()); }
+        let mut preprocessed_mask_values_dummy =
+            PreprocessedMaskValuesImpl::new(empty_pre_cols.span(), PREPROCESSED_COLUMNS.span());
+
+        // 2) Evaluate OODS using public samples.
+        let mut preimage_sum: QM31 = Zero::zero();
+        let mut base_spans_span = base_spans.span();
+        let mut inter_spans_span = inter_spans.span();
+        self.memory_address_to_id.evaluate_constraints_at_point(
+            ref preimage_sum,
+            ref preprocessed_mask_values_dummy,
+            ref base_spans_span,
+            ref inter_spans_span,
+            random_coeff,
+            point,
+        );
+
+        // 3) Slice proof values to this component using mask_points order up to this component.
+        let [
+            _pre_mask,
+            mut trace_mask_values,
+            mut interaction_mask_values,
+            _composition_mask,
+        ]: [ColumnSpan<Span<QM31>>; 4] = (*mask_values.try_into().unwrap()).unbox();
+
+        let mut set: PreprocessedColumnSet = Default::default();
+        let mut t_points: ColumnArray<Array<CirclePoint<QM31>>> = array![];
+        let mut i_points: ColumnArray<Array<CirclePoint<QM31>>> = array![];
+        let mut skip_t: usize = 0;
+        let mut skip_i: usize = 0;
+
+        // opcodes
+        skip_t = t_points.len();
+        skip_i = i_points.len();
+        self.opcodes.mask_points(ref set, ref t_points, ref i_points, point);
+        let mut d_t = t_points.len() - skip_t;
+        let mut d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // verify_instruction
+        skip_t = t_points.len();
+        skip_i = i_points.len();
+        self.verify_instruction.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t;
+        d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // blake_context
+        skip_t = t_points.len();
+        skip_i = i_points.len();
+        self.blake_context.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t;
+        d_i = i_points.len() - skip_i;
+        for _ in 0..d_t { let _ = trace_mask_values.pop_front().unwrap(); }
+        for _ in 0..d_i { let _ = interaction_mask_values.pop_front().unwrap(); }
+
+        // memory_address_to_id
+        skip_t = t_points.len();
+        skip_i = i_points.len();
+        self.memory_address_to_id.mask_points(ref set, ref t_points, ref i_points, point);
+        d_t = t_points.len() - skip_t;
+        d_i = i_points.len() - skip_i;
+        let mut trace_comp_vals: Array<Span<QM31>> = array![];
+        let mut inter_comp_vals: Array<Span<QM31>> = array![];
+        for _ in 0..d_t { trace_comp_vals.append(*trace_mask_values.pop_front().unwrap()); }
+        for _ in 0..d_i { inter_comp_vals.append(*interaction_mask_values.pop_front().unwrap()); }
+
+        // Evaluate proof OODS for this component using proof-provided values.
+        let mut proof_sum: QM31 = Zero::zero();
+        let mut trace_comp_vals_span = trace_comp_vals.span();
+        let mut inter_comp_vals_span = inter_comp_vals.span();
+        self.memory_address_to_id.evaluate_constraints_at_point(
+            ref proof_sum,
+            ref preprocessed_mask_values_dummy,
+            ref trace_comp_vals_span,
+            ref inter_comp_vals_span,
+            random_coeff,
+            point,
+        );
+
+        assert!(
+            preimage_sum == proof_sum,
+            "{}",
+            stwo_verifier_core::verifier::VerificationError::OodsNotMatching,
+        );
+    }
 }
 
 
@@ -1299,4 +1970,189 @@ fn preprocessed_trace_mask_points(
     }
 
     mask_points
+}
+
+// Public-polys sampling helpers (not part of the Air trait)
+fn sample_address_to_id_public_polys(
+    air: @CairoAir, point: CirclePoint<QM31>,
+) -> (ColumnArray<Array<QM31>>, ColumnArray<Array<QM31>>) {
+    let mut preprocessed_column_set: PreprocessedColumnSet = Default::default();
+    let mut trace_mask_points: ColumnArray<Array<CirclePoint<QM31>>> = array![];
+    let mut interaction_trace_mask_points: ColumnArray<Array<CirclePoint<QM31>>> = array![];
+    air.memory_address_to_id
+        .mask_points(
+            ref preprocessed_column_set,
+            ref trace_mask_points,
+            ref interaction_trace_mask_points,
+            point,
+        );
+
+    let log_size = *air.memory_address_to_id.claim.log_size;
+
+    // Base (trace) columns.
+    let mut base_samples: ColumnArray<Array<QM31>> = array![];
+    let base_len = air.memory_poly_coeffs.memory_address_to_id_base_poly_coeffs.len();
+    assert!(base_len == trace_mask_points.len());
+    for i in 0..base_len {
+        let coeffs = air.memory_poly_coeffs.memory_address_to_id_base_poly_coeffs[i];
+        let points = trace_mask_points[i];
+        let mut values: Array<QM31> = array![];
+        let n_pts = points.len();
+        for j in 0..n_pts {
+            let p = *points[j];
+            values.append(circle_eval_at_point(coeffs, log_size, p));
+        }
+        base_samples.append(values);
+    }
+
+    // Interaction columns.
+    let mut inter_samples: ColumnArray<Array<QM31>> = array![];
+    let inter_len = air
+        .memory_poly_coeffs
+        .memory_address_to_id_interaction_poly_coeffs
+        .len();
+    assert!(inter_len == interaction_trace_mask_points.len());
+    for i in 0..inter_len {
+        let coeffs = air.memory_poly_coeffs.memory_address_to_id_interaction_poly_coeffs[i];
+        let points = interaction_trace_mask_points[i];
+        let mut values: Array<QM31> = array![];
+        let n_pts = points.len();
+        for j in 0..n_pts {
+            let p = *points[j];
+            values.append(circle_eval_at_point(coeffs, log_size, p));
+        }
+        inter_samples.append(values);
+    }
+
+    (base_samples, inter_samples)
+}
+
+fn sample_id_to_big_public_polys(
+    air: @CairoAir, point: CirclePoint<QM31>,
+) -> (
+    Array<ColumnArray<Array<QM31>>>,
+    Array<ColumnArray<Array<QM31>>>,
+    ColumnArray<Array<QM31>>,
+    ColumnArray<Array<QM31>>,
+) {
+    let (big_components, small_component) = air.memory_id_to_value;
+
+    let mut big_base_samples_all: Array<ColumnArray<Array<QM31>>> = array![];
+    let mut big_inter_samples_all: Array<ColumnArray<Array<QM31>>> = array![];
+
+    let big_base_coeffs_all = air
+        .memory_poly_coeffs
+        .memory_id_to_big_base_poly_coeffs_big
+        .span();
+    let big_inter_coeffs_all = air
+        .memory_poly_coeffs
+        .memory_id_to_big_interaction_poly_coeffs_big
+        .span();
+
+    assert!(big_base_coeffs_all.len() == big_components.len());
+    assert!(big_inter_coeffs_all.len() == big_components.len());
+
+    let mut i: usize = 0;
+    for big_comp in big_components.span() {
+        let mut preprocessed_column_set: PreprocessedColumnSet = Default::default();
+        let mut trace_mask_points: ColumnArray<Array<CirclePoint<QM31>>> = array![];
+        let mut interaction_trace_mask_points: ColumnArray<Array<CirclePoint<QM31>>> = array![];
+        big_comp.mask_points(
+            ref preprocessed_column_set,
+            ref trace_mask_points,
+            ref interaction_trace_mask_points,
+            point,
+        );
+
+        let log_size = *big_comp.log_n_rows;
+
+        // Base columns for this big component.
+        let mut base_samples: ColumnArray<Array<QM31>> = array![];
+        let base_coeffs = big_base_coeffs_all[i];
+        assert!(base_coeffs.len() == trace_mask_points.len());
+        for j in 0..base_coeffs.len() {
+            let coeffs = base_coeffs[j];
+            let points = trace_mask_points[j];
+            let mut values: Array<QM31> = array![];
+            let n_pts = points.len();
+            for k in 0..n_pts {
+                let p = *points[k];
+                values.append(circle_eval_at_point(coeffs, log_size, p));
+            }
+            base_samples.append(values);
+        }
+
+        // Interaction columns for this big component.
+        let mut inter_samples: ColumnArray<Array<QM31>> = array![];
+        let inter_coeffs = big_inter_coeffs_all[i];
+        assert!(inter_coeffs.len() == interaction_trace_mask_points.len());
+        for j in 0..inter_coeffs.len() {
+            let coeffs = inter_coeffs[j];
+            let points = interaction_trace_mask_points[j];
+            let mut values: Array<QM31> = array![];
+            let n_pts = points.len();
+            for k in 0..n_pts {
+                let p = *points[k];
+                values.append(circle_eval_at_point(coeffs, log_size, p));
+            }
+            inter_samples.append(values);
+        }
+
+        big_base_samples_all.append(base_samples);
+        big_inter_samples_all.append(inter_samples);
+        i += 1_usize;
+    }
+
+    // Small component: single set of base and interaction columns.
+    let mut preprocessed_column_set: PreprocessedColumnSet = Default::default();
+    let mut trace_mask_points: ColumnArray<Array<CirclePoint<QM31>>> = array![];
+    let mut interaction_trace_mask_points: ColumnArray<Array<CirclePoint<QM31>>> = array![];
+    small_component.mask_points(
+        ref preprocessed_column_set,
+        ref trace_mask_points,
+        ref interaction_trace_mask_points,
+        point,
+    );
+
+    let small_log_size = *small_component.log_n_rows;
+
+    // Base columns for small component.
+    let mut small_base_samples: ColumnArray<Array<QM31>> = array![];
+    let small_base_coeffs = air
+        .memory_poly_coeffs
+        .memory_id_to_big_base_poly_coeffs_small
+        .span();
+    assert!(small_base_coeffs.len() == trace_mask_points.len());
+    for j in 0..small_base_coeffs.len() {
+        let coeffs = small_base_coeffs[j];
+        let points = trace_mask_points[j];
+        let mut values: Array<QM31> = array![];
+        let n_pts = points.len();
+        for k in 0..n_pts {
+            let p = *points[k];
+            values.append(circle_eval_at_point(coeffs, small_log_size, p));
+        }
+        small_base_samples.append(values);
+    }
+
+    // Interaction columns for small component.
+    let mut small_inter_samples: ColumnArray<Array<QM31>> = array![];
+    let small_inter_coeffs = air
+        .memory_poly_coeffs
+        .memory_id_to_big_interaction_poly_coeffs_small
+        .span();
+    assert!(small_inter_coeffs.len() == interaction_trace_mask_points.len());
+    for j in 0..small_inter_coeffs.len() {
+        let coeffs = small_inter_coeffs[j];
+        let points = interaction_trace_mask_points[j];
+        let mut values: Array<QM31> = array![];
+        let n_pts = points.len();
+        for k in 0..n_pts {
+            let p = *points[k];
+            values.append(circle_eval_at_point(coeffs, small_log_size, p));
+        }
+        small_inter_samples.append(values);
+    }
+
+    (big_base_samples_all, big_inter_samples_all, small_base_samples, small_inter_samples)
 }
