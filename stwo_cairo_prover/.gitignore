@@ -1,3 +1,5 @@
 /target
 /test_data/test_read_from_small_files
 /test_data/test_read_from_large_files
+/test_data/test_prove_verify_fibonacci_100k/*.json
+!/test_data/test_prove_verify_fibonacci_100k/compiled.json

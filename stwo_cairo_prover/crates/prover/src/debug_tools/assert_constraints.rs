@@ -259,15 +259,25 @@ pub fn assert_cairo_constraints(input: ProverInput, preprocessed_trace: PreProce
     // Base trace.
     let cairo_claim_generator = CairoClaimGenerator::new(input);
     let mut tree_builder = commitment_scheme.tree_builder();
-    let (claim, interaction_generator) = cairo_claim_generator.write_trace(&mut tree_builder);
+    let (
+        claim,
+        interaction_generator,
+        _memory_address_to_id_base_span,
+        _id_to_big_base_spans_big,
+        _id_to_big_base_spans_small,
+    ) = cairo_claim_generator.write_trace(&mut tree_builder);
     tree_builder.finalize_interaction();
 
     // Interaction trace.
     let mut dummy_channel = Blake2sChannel::default();
     let interaction_elements = CairoInteractionElements::draw(&mut dummy_channel);
     let mut tree_builder = commitment_scheme.tree_builder();
-    let interaction_claim =
-        interaction_generator.write_interaction_trace(&mut tree_builder, &interaction_elements);
+    let (
+        interaction_claim,
+        _memory_address_to_id_interaction_span,
+        _id_to_big_interaction_spans_big,
+        _id_to_big_interaction_spans_small,
+    ) = interaction_generator.write_interaction_trace(&mut tree_builder, &interaction_elements);
     tree_builder.finalize_interaction();
 
     let components = CairoComponents::new(

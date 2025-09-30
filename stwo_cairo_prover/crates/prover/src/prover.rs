@@ -8,6 +8,7 @@ use cairo_air::{CairoProof, PreProcessedTraceVariant};
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use stwo::core::channel::{Channel, MerkleChannel};
+use stwo::core::fields::m31::M31;
 use stwo::core::fields::qm31::SecureField;
 use stwo::core::fri::FriConfig;
 use stwo::core::pcs::PcsConfig;
@@ -16,6 +17,7 @@ use stwo::core::proof_of_work::GrindOps;
 use stwo::core::vcs::MerkleHasher;
 use stwo::prover::backend::simd::SimdBackend;
 use stwo::prover::backend::BackendForChannel;
+use stwo::prover::backend::Column;
 use stwo::prover::poly::circle::PolyOps;
 use stwo::prover::{prove, CommitmentSchemeProver, ProvingError};
 use stwo_cairo_adapter::ProverInput;
@@ -63,11 +65,33 @@ where
     // Base trace.
     let mut tree_builder = commitment_scheme.tree_builder();
     let span = span!(Level::INFO, "Base trace").entered();
-    let (claim, interaction_generator) = cairo_claim_generator.write_trace(&mut tree_builder);
+    let (
+        mut claim,
+        interaction_generator,
+        addr_to_id_base_span,
+        id_to_big_base_spans_big,
+        id_to_big_base_span_small,
+    ) = cairo_claim_generator.write_trace(&mut tree_builder);
     span.exit();
 
     claim.mix_into(channel);
     tree_builder.commit(channel);
+
+    claim
+        .public_data
+        .memory_poly_coeffs
+        .memory_address_to_id_base_poly_coeffs =
+        collect_poly_coeffs_for_span(&commitment_scheme, &addr_to_id_base_span);
+    claim
+        .public_data
+        .memory_poly_coeffs
+        .memory_id_to_big_base_poly_coeffs_big =
+        collect_poly_coeffs_for_spans(&commitment_scheme, &id_to_big_base_spans_big);
+    claim
+        .public_data
+        .memory_poly_coeffs
+        .memory_id_to_big_base_poly_coeffs_small =
+        collect_poly_coeffs_for_span(&commitment_scheme, &id_to_big_base_span_small);
 
     // Draw interaction elements.
     let interaction_pow = SimdBackend::grind(channel, INTERACTION_POW_BITS);
@@ -77,8 +101,12 @@ where
     // Interaction trace.
     let span = span!(Level::INFO, "Interaction trace").entered();
     let mut tree_builder = commitment_scheme.tree_builder();
-    let interaction_claim =
-        interaction_generator.write_interaction_trace(&mut tree_builder, &interaction_elements);
+    let (
+        interaction_claim,
+        addr_to_id_interaction_span,
+        id_to_big_interaction_spans_big,
+        id_to_big_interaction_span_small,
+    ) = interaction_generator.write_interaction_trace(&mut tree_builder, &interaction_elements);
     span.exit();
 
     tracing::info!(
@@ -91,8 +119,25 @@ where
         SecureField::zero()
     );
 
+    // Commit, then capture the memory_address_to_id interaction columns similarly.
     interaction_claim.mix_into(channel);
     tree_builder.commit(channel);
+
+    claim
+        .public_data
+        .memory_poly_coeffs
+        .memory_address_to_id_interaction_poly_coeffs =
+        collect_poly_coeffs_for_span(&commitment_scheme, &addr_to_id_interaction_span);
+    claim
+        .public_data
+        .memory_poly_coeffs
+        .memory_id_to_big_interaction_poly_coeffs_big =
+        collect_poly_coeffs_for_spans(&commitment_scheme, &id_to_big_interaction_spans_big);
+    claim
+        .public_data
+        .memory_poly_coeffs
+        .memory_id_to_big_interaction_poly_coeffs_small =
+        collect_poly_coeffs_for_span(&commitment_scheme, &id_to_big_interaction_span_small);
 
     // Component provers.
     let component_builder = CairoComponents::new(
@@ -129,6 +174,31 @@ where
         interaction_claim,
         stark_proof: proof,
     })
+}
+
+// Helper functions to collect memory columns for interpolation.
+fn collect_poly_coeffs_for_span<MC: MerkleChannel>(
+    cs: &CommitmentSchemeProver<'_, SimdBackend, MC>,
+    span: &stwo::core::pcs::TreeSubspan,
+) -> Vec<Vec<M31>>
+where
+    SimdBackend: BackendForChannel<MC>,
+{
+    let polynomials = cs.polynomials();
+    let poly_slice = &polynomials[span.tree_index][span.col_start..span.col_end];
+    poly_slice.iter().map(|poly| poly.coeffs.to_cpu()).collect()
+}
+fn collect_poly_coeffs_for_spans<MC: MerkleChannel>(
+    cs: &CommitmentSchemeProver<'_, SimdBackend, MC>,
+    spans: &[stwo::core::pcs::TreeSubspan],
+) -> Vec<Vec<Vec<M31>>>
+where
+    SimdBackend: BackendForChannel<MC>,
+{
+    spans
+        .iter()
+        .map(|s| collect_poly_coeffs_for_span(cs, s))
+        .collect()
 }
 
 #[derive(Default)]
@@ -347,7 +417,6 @@ pub mod tests {
     }
 
     #[cfg(test)]
-    #[cfg(feature = "slow-tests")]
     pub mod slow_tests {
 
         use std::io::Write;
@@ -359,6 +428,7 @@ pub mod tests {
         use stwo::core::fri::FriConfig;
         use stwo::core::pcs::PcsConfig;
         use stwo::core::vcs::blake2_merkle::Blake2sMerkleChannel;
+        use stwo_cairo_adapter::utils::{run_program_and_adapter_shards, ProgramType};
         use stwo_cairo_common::preprocessed_columns::preprocessed_trace::PreProcessedTrace;
         use stwo_cairo_serialize::CairoSerialize;
         use tempfile::NamedTempFile;
@@ -396,6 +466,138 @@ pub mod tests {
             )
             .unwrap();
             verify_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace).unwrap();
+        }
+
+        #[test]
+        fn test_prove_verify_all_opcode_components_shards() {
+            let compiled_program =
+                get_compiled_cairo_program_path("test_prove_verify_all_opcode_components");
+            let shards =
+                run_program_and_adapter_shards(&compiled_program, ProgramType::Json, None, 1000);
+
+            let preprocessed_trace = PreProcessedTraceVariant::CanonicalWithoutPedersen;
+            let n_shards = shards.len();
+            for (i, shard) in shards.into_iter().enumerate() {
+                tracing::info!(
+                    "Proving shard {}/{} (initial_pc={}, final_pc={})",
+                    i + 1,
+                    n_shards,
+                    shard.state_transitions.initial_state.pc.0,
+                    shard.state_transitions.final_state.pc.0
+                );
+
+                let cairo_proof = prove_cairo::<Blake2sMerkleChannel>(
+                    shard,
+                    PcsConfig::default(),
+                    preprocessed_trace,
+                )
+                .unwrap();
+                verify_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace).unwrap();
+                tracing::info!("Verified shard {}/{}", i + 1, n_shards);
+            }
+        }
+
+        #[test]
+        fn test_prove_verify_fibonacci_100k() {
+            let compiled_program =
+                get_compiled_cairo_program_path("test_prove_verify_fibonacci_100k");
+            let input = run_program_and_adapter(&compiled_program, ProgramType::Json, None);
+            let preprocessed_trace = PreProcessedTraceVariant::CanonicalWithoutPedersen;
+            let cairo_proof = prove_cairo::<Blake2sMerkleChannel>(
+                input,
+                PcsConfig::default(),
+                preprocessed_trace,
+            )
+            .unwrap();
+            verify_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace).unwrap();
+        }
+
+        #[test]
+        fn test_prove_verify_fibonacci_100k_shards() {
+            const N_STEPS: usize = 400_013;
+            let compiled_program =
+                get_compiled_cairo_program_path("test_prove_verify_fibonacci_100k");
+            let shards = run_program_and_adapter_shards(
+                &compiled_program,
+                ProgramType::Json,
+                None,
+                N_STEPS / 4,
+            );
+
+            let preprocessed_trace = PreProcessedTraceVariant::CanonicalWithoutPedersen;
+            let n_shards = shards.len();
+            for (i, shard) in shards.into_iter().enumerate() {
+                tracing::info!(
+                    "Proving shard {}/{} (initial_pc={}, final_pc={})",
+                    i + 1,
+                    n_shards,
+                    shard.state_transitions.initial_state.pc.0,
+                    shard.state_transitions.final_state.pc.0
+                );
+
+                let cairo_proof = prove_cairo::<Blake2sMerkleChannel>(
+                    shard,
+                    PcsConfig::default(),
+                    preprocessed_trace,
+                )
+                .unwrap();
+                verify_cairo::<Blake2sMerkleChannel>(cairo_proof, preprocessed_trace).unwrap();
+                tracing::info!("Verified shard {}/{}", i + 1, n_shards);
+            }
+        }
+
+        #[test]
+        fn test_serialize_fibonacci_100k_shards() {
+            const N_STEPS: usize = 400_013;
+            let compiled_program =
+                get_compiled_cairo_program_path("test_prove_verify_fibonacci_100k");
+            let shards = run_program_and_adapter_shards(
+                &compiled_program,
+                ProgramType::Json,
+                None,
+                N_STEPS / 4,
+            );
+
+            let preprocessed_trace = PreProcessedTraceVariant::Canonical;
+            // Write to a shared repo path so aggregator tests can read them.
+            let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../test_data/test_prove_verify_fibonacci_100k");
+            std::fs::create_dir_all(&out_dir).expect("failed to create output dir");
+
+            for (i, shard) in shards.into_iter().enumerate() {
+                let cairo_proof = prove_cairo::<Blake2sMerkleChannel>(
+                    shard,
+                    PcsConfig {
+                        pow_bits: 26,
+                        fri_config: FriConfig::new(0, 1, 70),
+                    },
+                    preprocessed_trace,
+                )
+                .expect("failed to generate shard proof");
+
+                // Serialize to CairoSerde (hex) into files proof_shard_{i}.json
+                let mut serialized: Vec<starknet_ff::FieldElement> = Vec::new();
+                CairoSerialize::serialize(&cairo_proof, &mut serialized);
+                let proof_hex: Vec<String> = serialized
+                    .into_iter()
+                    .map(|felt| format!("0x{felt:x}"))
+                    .collect();
+                let out_path = out_dir.join(format!("proof_shard_{}.json", i));
+                std::fs::write(&out_path, sonic_rs::to_string_pretty(&proof_hex).unwrap())
+                    .expect("failed writing serialized shard proof");
+
+                // Now run the aggregator on the serialized proof (read back from file).
+                use cairo_air::aggregate::verify_cairo_shard;
+                use cairo_air::utils::{deserialize_proof_from_file, ProofFormat};
+                use stwo::core::channel::MerkleChannel;
+
+                let deserialized = deserialize_proof_from_file::<
+                    <Blake2sMerkleChannel as MerkleChannel>::H,
+                >(&out_path, ProofFormat::CairoSerde)
+                .expect("failed to deserialize serialized shard proof");
+                verify_cairo_shard::<Blake2sMerkleChannel>(deserialized, preprocessed_trace)
+                    .expect("verify_cairo_shard failed on shard proof");
+            }
         }
 
         #[test]

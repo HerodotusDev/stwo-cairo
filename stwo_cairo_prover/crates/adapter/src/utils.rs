@@ -16,7 +16,7 @@ use cairo_vm::Felt252;
 use clap::ValueEnum;
 use serde_json::from_reader;
 
-use crate::adapter::adapter;
+use crate::adapter::{adapter, adapter_shards};
 use crate::ProverInput;
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -125,6 +125,16 @@ pub fn get_program_and_hints_from_executable(
     };
 
     (program, Box::new(hint_processor))
+}
+
+pub fn run_program_and_adapter_shards(
+    program_path: &PathBuf,
+    program_type: ProgramType,
+    args: Option<&PathBuf>,
+    size_of_shard: usize,
+) -> Vec<ProverInput> {
+    let runner = run_program(program_path, program_type, args);
+    adapter_shards(&runner, size_of_shard)
 }
 
 pub fn read_cairo_arguments_from_file(path: &PathBuf) -> Vec<Arg> {

@@ -17,12 +17,13 @@ mod constraints;
 /// ID3 = [id9, id10, 0, 0]
 pub const LOG_MEMORY_ADDRESS_TO_ID_SPLIT: u32 = 4;
 pub const MEMORY_ADDRESS_TO_ID_SPLIT: usize = 16;
-pub const N_ID_AND_MULT_COLUMNS_PER_CHUNK: usize = 2;
+pub const N_ID_AND_MULT_COLUMNS_PER_CHUNK: usize = 5; // enabler, prev_address, curr_address, id, multiplicity
 pub const N_TRACE_COLUMNS: usize = MEMORY_ADDRESS_TO_ID_SPLIT * N_ID_AND_MULT_COLUMNS_PER_CHUNK;
 
 // Number of QM31 columns in the interaction trace.
 // Each QM31 column is implemented as 4 M31 columns.
-pub const N_INTERACTION_TRACE_QM31_COLUMNS: usize = (MEMORY_ADDRESS_TO_ID_SPLIT / 2);
+// New AIR uses 4 lookups per split batched in pairs => 2 QM31 columns per split.
+pub const N_INTERACTION_TRACE_QM31_COLUMNS: usize = (2 * MEMORY_ADDRESS_TO_ID_SPLIT);
 
 pub const RELATION_USES_PER_ROW: [(felt252, u32); 0] = [];
 
@@ -67,6 +68,8 @@ pub struct Component {
     pub claim: Claim,
     pub interaction_claim: InteractionClaim,
     pub lookup_elements: crate::MemoryAddressToIdElements,
+    pub address_lookup_elements: crate::AddressElements,
+    pub range_check_19_lookup_elements: crate::RangeCheck_19Elements,
 }
 
 pub impl NewComponentImpl of NewComponent<Component> {
@@ -82,6 +85,8 @@ pub impl NewComponentImpl of NewComponent<Component> {
             claim: *claim,
             interaction_claim: *interaction_claim,
             lookup_elements: interaction_elements.memory_address_to_id.clone(),
+            address_lookup_elements: interaction_elements.address.clone(),
+            range_check_19_lookup_elements: interaction_elements.range_checks.rc_19.clone(),
         }
     }
 }
@@ -124,8 +129,9 @@ pub impl CairoComponentImpl of CairoComponent<Component> {
         let params = constraints::ConstraintParams {
             column_size: pow2(log_size).try_into().unwrap(),
             lookup_elements: self.lookup_elements,
-            seq: preprocessed_mask_values.get(PreprocessedColumn::Seq(log_size)),
             claimed_sum: *self.interaction_claim.claimed_sum,
+            address_lookup_elements: self.address_lookup_elements,
+            range_check_19_lookup_elements: self.range_check_19_lookup_elements,
         };
 
         let trace_domain = CanonicCosetImpl::new(log_size);

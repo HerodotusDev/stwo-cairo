@@ -31,6 +31,24 @@ pub trait Air<T> {
         mask_values: TreeSpan<ColumnSpan<Span<QM31>>>,
         random_coeff: QM31,
     ) -> QM31;
+
+    /// Asserts the reconstructed OODS (from public memory polynomials) equals the
+    /// prover-supplied OODS for the Address->Id component at `point`.
+    fn assert_address_to_id_preimage_oods(
+        self: @T,
+        point: CirclePoint<QM31>,
+        mask_values: TreeSpan<ColumnSpan<Span<QM31>>>,
+        random_coeff: QM31,
+    );
+
+    /// Asserts the reconstructed OODS (from public memory polynomials) equals the
+    /// prover-supplied OODS for the Id->Big components at `point`.
+    fn assert_id_to_big_preimage_oods(
+        self: @T,
+        point: CirclePoint<QM31>,
+        mask_values: TreeSpan<ColumnSpan<Span<QM31>>>,
+        random_coeff: QM31,
+    );
 }
 
 /// Given a commitment to the traces, and an AIR definition, verifies the proof.
@@ -81,6 +99,12 @@ pub fn verify<A, +Air<A>, +Drop<A>>(
         "{}",
         VerificationError::OodsNotMatching,
     );
+
+    // Assert Address->Id OODS derived from public polynomials matches prover values.
+    air.assert_address_to_id_preimage_oods(ood_point, sampled_oods_values, random_coeff);
+
+    // Assert Id->Big OODS derived from public polynomials matches prover values.
+    air.assert_id_to_big_preimage_oods(ood_point, sampled_oods_values, random_coeff);
 
     commitment_scheme.verify_values(sample_points, commitment_scheme_proof, ref channel);
 }

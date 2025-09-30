@@ -56,9 +56,15 @@ where
     let mut entries = cairo_relation_entries(components, trace);
 
     // Public data.
-    let initial_pc = public_data.initial_state.pc.0;
-    let initial_ap = public_data.initial_state.ap.0;
-    let final_ap = public_data.final_state.ap.0;
+    let overall_initial_state = public_data
+        .overall_initial_state
+        .unwrap_or(public_data.initial_state);
+    let overall_final_state = public_data
+        .overall_final_state
+        .unwrap_or(public_data.final_state);
+    let initial_pc = overall_initial_state.pc.0;
+    let initial_ap = overall_initial_state.ap.0;
+    let final_ap = overall_final_state.ap.0;
     public_data
         .public_memory
         .get_entries(initial_pc, initial_ap, final_ap)
@@ -87,6 +93,48 @@ where
         relation: "Opcodes".to_string(),
         mult: -M31::one(),
         values: public_data.initial_state.values().to_vec(),
+    });
+
+    // Address relation compensation to mirror PublicData::logup_sum.
+    entries.push(RelationTrackerEntry {
+        relation: "Address".to_string(),
+        mult: M31::one(),
+        values: vec![M31::from_u32_unchecked(0)],
+    });
+    entries.push(RelationTrackerEntry {
+        relation: "Address".to_string(),
+        mult: -M31::one(),
+        values: vec![M31::from_u32_unchecked(public_data.last_current_address)],
+    });
+
+    // Compensation for MemoryIdToBig big table.
+    if public_data.last_big_id != 0 {
+        entries.push(RelationTrackerEntry {
+            relation: "Id".to_string(),
+            mult: M31::one(),
+            values: vec![M31::from_u32_unchecked(
+                stwo_cairo_adapter::memory::LARGE_MEMORY_VALUE_ID_BASE,
+            )],
+        });
+        entries.push(RelationTrackerEntry {
+            relation: "Id".to_string(),
+            mult: -M31::one(),
+            values: vec![M31::from_u32_unchecked(public_data.last_big_id)],
+        });
+    }
+
+    // Compensation for MemoryIdToBig small table (always included).
+    entries.push(RelationTrackerEntry {
+        relation: "Id".to_string(),
+        mult: M31::one(),
+        values: vec![M31::from_u32_unchecked(
+            stwo_cairo_common::prover_types::cpu::PRIME - 1,
+        )],
+    });
+    entries.push(RelationTrackerEntry {
+        relation: "Id".to_string(),
+        mult: -M31::one(),
+        values: vec![M31::from_u32_unchecked(public_data.last_small_id)],
     });
 
     entries

@@ -1,6 +1,4 @@
-use components::memory_address_to_id::{
-    InteractionClaimImpl as MemoryAddressToIdInteractionClaimImpl, LOG_MEMORY_ADDRESS_TO_ID_SPLIT,
-};
+use components::memory_address_to_id::InteractionClaimImpl as MemoryAddressToIdInteractionClaimImpl;
 use components::memory_id_to_big::InteractionClaimImpl as MemoryIdToBigInteractionClaimImpl;
 use stwo_verifier_utils::{PublicMemoryEntries, PublicMemoryEntriesTrait, PublicMemoryEntry};
 
@@ -33,6 +31,7 @@ use stwo_verifier_core::fields::Invertible;
 #[cfg(not(feature: "qm31_opcode"))]
 use stwo_verifier_core::fields::m31::{AddM31Trait, MulByM31Trait};
 use stwo_verifier_core::fields::m31::{M31, P_U32};
+use crate::components::memory_id_to_big::LARGE_MEMORY_VALUE_ID_BASE;
 #[cfg(not(feature: "qm31_opcode"))]
 use stwo_verifier_core::fields::qm31::{PackedUnreducedQM31, PackedUnreducedQM31Trait};
 use stwo_verifier_core::fields::qm31::{QM31, qm31_const};
@@ -273,24 +272,33 @@ pub fn lookup_sum(
 /// Panics if the claim is invalid.
 fn verify_claim(claim: @CairoClaim) {
     let PublicData {
-        public_memory: PublicMemory {
-            program, public_segments, output: _output, safe_call_ids: _safe_call_ids,
-            }, initial_state: CasmState {
-            pc: initial_pc, ap: initial_ap, fp: initial_fp,
-            }, final_state: CasmState {
-            pc: final_pc, ap: final_ap, fp: final_fp,
-        },
+        public_memory: PublicMemory { program, public_segments, output: _output, safe_call_ids: _ },
+        initial_state,
+        final_state,
+        overall_initial_state,
+        overall_final_state,
+        ..
     } = claim.public_data;
 
     verify_builtins(claim.builtins, public_segments);
     verify_program(*program, public_segments);
 
-    let initial_pc: u32 = (*initial_pc).into();
-    let initial_ap: u32 = (*initial_ap).into();
-    let initial_fp: u32 = (*initial_fp).into();
-    let final_pc: u32 = (*final_pc).into();
-    let final_ap: u32 = (*final_ap).into();
-    let final_fp: u32 = (*final_fp).into();
+    // Choose overall boundaries when present.
+    let effective_initial: CasmState = match overall_initial_state {
+        Option::Some(state) => *state,
+        Option::None => *initial_state,
+    };
+    let effective_final: CasmState = match overall_final_state {
+        Option::Some(state) => *state,
+        Option::None => *final_state,
+    };
+
+    let initial_pc: u32 = (effective_initial.pc).into();
+    let initial_ap: u32 = (effective_initial.ap).into();
+    let initial_fp: u32 = (effective_initial.fp).into();
+    let final_pc: u32 = (effective_final.pc).into();
+    let final_ap: u32 = (effective_final.ap).into();
+    let final_fp: u32 = (effective_final.fp).into();
 
     assert!(initial_pc.is_one());
     assert!(initial_pc + 2 < initial_ap);
@@ -299,24 +307,9 @@ fn verify_claim(claim: @CairoClaim) {
     assert!(final_pc == 5);
     assert!(initial_ap <= final_ap);
 
-    // Sanity check: ensure that the maximum address in the address_to_id component fits within a
-    // 27-bit address space (i.e., is less than 2**27).
-    // Higher addresses are not supported by components that assume 27-bit addresses.
-    assert!(*claim.memory_address_to_id.log_size <= 27_u32 - LOG_MEMORY_ADDRESS_TO_ID_SPLIT);
-
-    // Count the number of uses of each relation.
+    // Count the number of uses of each relation and ensure each is < P.
     let mut relation_uses: RelationUsesDict = Default::default();
     claim.accumulate_relation_uses(ref relation_uses);
-
-    // Make sure ap does not overflow P:
-    // Check that the number of uses of the Opcodes relation is leq than 2^29. This bounds the
-    // number of steps of the program by 2^29. An add_ap use can increase ap *to* at most 2^27-1,
-    // and every other step can increase ap by at most 2. Therefore the most ap can increase to with
-    // n_steps steps is 2^27-1 + 2 * (n_steps-1). This is less than P if n_steps <= 2^29.
-    let opcodes_uses = relation_uses.get('Opcodes');
-    assert!(opcodes_uses <= pow2(29).into());
-
-    // Check that no relation has more than P-1 uses.
     let squashed_dict = relation_uses.squash();
     let entries = squashed_dict.into_entries();
     for entry in entries {
@@ -698,10 +691,31 @@ mod combine;
 
 
 #[derive(Drop, Serde)]
+pub struct MemoryPolyCoeffs {
+    pub memory_address_to_id_base_poly_coeffs: Array<Array<M31>>,
+    pub memory_address_to_id_interaction_poly_coeffs: Array<Array<M31>>,
+    pub memory_id_to_big_base_poly_coeffs_big: Array<Array<Array<M31>>>,
+    pub memory_id_to_big_base_poly_coeffs_small: Array<Array<M31>>,
+    pub memory_id_to_big_interaction_poly_coeffs_big: Array<Array<Array<M31>>>,
+    pub memory_id_to_big_interaction_poly_coeffs_small: Array<Array<M31>>,
+}
+
+#[derive(Drop, Serde)]
 pub struct PublicData {
     pub public_memory: PublicMemory,
     pub initial_state: CasmState,
     pub final_state: CasmState,
+    // Last non-zero current address used in the address_to_id table (0 if no entries).
+    pub last_current_address: u32,
+    // Last current id used in the big memory_id_to_value table (0 if unused).
+    pub last_big_id: u32,
+    // Last current id used in the small memory_id_to_value table (P-1 if no small rows).
+    pub last_small_id: u32,
+    // Optional overall boundary states (used for shards). If None, use initial/final.
+    pub overall_initial_state: Option<CasmState>,
+    pub overall_final_state: Option<CasmState>,
+    // Grouped trace columns (not mixed into transcript).
+    pub memory_poly_coeffs: MemoryPolyCoeffs,
 }
 
 #[generate_trait]
@@ -709,12 +723,26 @@ impl PublicDataImpl of PublicDataTrait {
     fn logup_sum(self: @PublicData, lookup_elements: @CairoInteractionElements) -> QM31 {
         let mut sum = Zero::zero();
 
+        // Choose overall boundaries when present.
+        let overall_initial_pc: u32 = match self.overall_initial_state {
+            Option::Some(state) => (*state.pc).into(),
+            Option::None => (*self.initial_state.pc).into(),
+        };
+        let overall_initial_ap: u32 = match self.overall_initial_state {
+            Option::Some(state) => (*state.ap).into(),
+            Option::None => (*self.initial_state.ap).into(),
+        };
+        let overall_final_ap: u32 = match self.overall_final_state {
+            Option::Some(state) => (*state.ap).into(),
+            Option::None => (*self.final_state.ap).into(),
+        };
+
         let public_memory_entries = self
             .public_memory
             .get_entries(
-                initial_pc: (*self.initial_state.pc).into(),
-                initial_ap: (*self.initial_state.ap).into(),
-                final_ap: (*self.final_state.ap).into(),
+                initial_pc: overall_initial_pc,
+                initial_ap: overall_initial_ap,
+                final_ap: overall_final_ap,
             );
         sum += sum_public_memory_entries(public_memory_entries, lookup_elements);
 
@@ -723,6 +751,29 @@ impl PublicDataImpl of PublicDataTrait {
         sum += lookup_elements.opcodes.combine([pc, ap, fp]).inverse();
         let CasmState { pc, ap, fp } = *self.initial_state;
         sum -= lookup_elements.opcodes.combine([pc, ap, fp]).inverse();
+
+        // Address relation compensation: +1/Address(0) - 1/Address(last_current_address).
+        let zero_m31: M31 = 0_u32.try_into().unwrap();
+        sum += lookup_elements.address.combine([zero_m31]).inverse();
+        let last_addr_m31: M31 = (*self.last_current_address).try_into().unwrap();
+        sum -= lookup_elements.address.combine([last_addr_m31]).inverse();
+
+        // Id relation compensation for MemoryIdToBig big table
+        // (+1/Id(LARGE_MEMORY_VALUE_ID_BASE - 1) - 1/Id(last_big_id)) if used.
+        if *self.last_big_id != 0_u32 {
+            let base_minus_one: u32 = LARGE_MEMORY_VALUE_ID_BASE - 1_u32;
+            let base_minus_one_m31: M31 = base_minus_one.try_into().unwrap();
+            sum += lookup_elements.id.combine([base_minus_one_m31]).inverse();
+            let last_big_id_m31: M31 = (*self.last_big_id).try_into().unwrap();
+            sum -= lookup_elements.id.combine([last_big_id_m31]).inverse();
+        }
+
+        // Id relation compensation for MemoryIdToBig small table (always included).
+        let p_minus_one: u32 = P_U32 - 1_u32;
+        let p_minus_one_m31: M31 = p_minus_one.try_into().unwrap();
+        sum += lookup_elements.id.combine([p_minus_one_m31]).inverse();
+        let last_small_id_m31: M31 = (*self.last_small_id).try_into().unwrap();
+        sum -= lookup_elements.id.combine([last_small_id_m31]).inverse();
 
         sum
     }
@@ -857,4 +908,3 @@ impl CairoVerificationErrorDisplay of core::fmt::Display<CairoVerificationError>
         }
     }
 }
-

@@ -13,7 +13,7 @@ use stwo_cairo_adapter::builtins::{
 use stwo_cairo_adapter::memory::LARGE_MEMORY_VALUE_ID_BASE;
 use stwo_cairo_adapter::HashMap;
 use stwo_cairo_common::memory::LOG_MEMORY_ADDRESS_BOUND;
-use stwo_cairo_common::prover_types::cpu::{CasmState, PRIME};
+use stwo_cairo_common::prover_types::cpu::PRIME;
 use stwo_constraint_framework::PREPROCESSED_TRACE_IDX;
 use thiserror::Error;
 
@@ -25,7 +25,7 @@ use crate::builtins_air::BuiltinsClaim;
 use crate::components::memory_address_to_id::MEMORY_ADDRESS_TO_ID_SPLIT;
 use crate::{CairoProof, PreProcessedTraceVariant};
 
-fn verify_claim(claim: &CairoClaim) {
+pub(crate) fn verify_claim(claim: &CairoClaim) {
     let PublicData {
         public_memory:
             PublicMemory {
@@ -34,32 +34,35 @@ fn verify_claim(claim: &CairoClaim) {
                 output: _output,
                 safe_call_ids: _safe_call_ids,
             },
-        initial_state:
-            CasmState {
-                pc: initial_pc,
-                ap: initial_ap,
-                fp: initial_fp,
-            },
-        final_state:
-            CasmState {
-                pc: final_pc,
-                ap: final_ap,
-                fp: final_fp,
-            },
+        initial_state,
+        final_state,
+        overall_final_state,
+        overall_initial_state,
+        ..
     } = &claim.public_data;
 
     verify_builtins(&claim.builtins, public_segments);
 
     verify_program(program, public_segments);
 
-    assert_eq!(*initial_pc, BaseField::one());
+    let overall_initial_state = overall_initial_state.unwrap_or(*initial_state);
+    let overall_final_state = overall_final_state.unwrap_or(*final_state);
+
+    let initial_pc = overall_initial_state.pc;
+    let initial_ap = overall_initial_state.ap;
+    let initial_fp = overall_initial_state.fp;
+    let final_pc = overall_final_state.pc;
+    let final_ap = overall_final_state.ap;
+    let final_fp = overall_final_state.fp;
+
+    assert_eq!(initial_pc, BaseField::one());
     assert!(
-        *initial_pc + BaseField::from(2) < *initial_ap,
+        initial_pc + BaseField::from(2) < initial_ap,
         "Initial pc + 2 must be less than initial ap, but got initial_pc: {initial_pc}, initial_ap: {initial_ap}"
     );
     assert_eq!(initial_fp, final_fp);
     assert_eq!(initial_fp, initial_ap);
-    assert_eq!(*final_pc, BaseField::from(5));
+    assert_eq!(final_pc, BaseField::from(5));
     assert!(initial_ap <= final_ap);
 
     // Assert that each relation has strictly less than P uses.
