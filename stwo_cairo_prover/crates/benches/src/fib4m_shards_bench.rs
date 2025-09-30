@@ -2,11 +2,10 @@ use std::time::{Duration, Instant};
 
 use cairo_air::aggregate::verify_cairo_shard;
 use cairo_air::PreProcessedTraceVariant;
-use dev_utils::utils::{
-    get_compiled_cairo_program_path, run_program_and_adapter_shards, ProgramType,
-};
+use dev_utils::utils::get_compiled_cairo_program_path;
 use stwo::core::pcs::PcsConfig;
 use stwo::core::vcs::blake2_merkle::Blake2sMerkleChannel;
+use stwo_cairo_adapter::utils::{run_program_and_adapter_shards, ProgramType};
 use stwo_cairo_prover::prover::prove_cairo;
 use tracing::{info, span, Level};
 use tracing_subscriber::fmt::format::FmtSpan;
