@@ -2,12 +2,9 @@ use itertools::{chain, Itertools};
 use num_traits::One;
 use serde::{Deserialize, Serialize};
 use stwo::core::channel::Channel;
-use stwo::core::fields::m31::M31;
 use stwo::core::fields::qm31::{SecureField, SECURE_EXTENSION_DEGREE};
 use stwo::core::pcs::TreeVec;
-use stwo_cairo_adapter::memory::LARGE_MEMORY_VALUE_ID_BASE;
 use stwo_cairo_common::memory::{N_M31_IN_FELT252, N_M31_IN_SMALL_FELT252};
-use stwo_cairo_common::preprocessed_columns::preprocessed_trace::{PreProcessedColumn, Seq};
 use stwo_cairo_serialize::{CairoDeserialize, CairoSerialize};
 use stwo_constraint_framework::{
     relation, EvalAtRow, FrameworkComponent, FrameworkEval, RelationEntry, TraceLocationAllocator,
@@ -19,8 +16,14 @@ use crate::relations;
 // TODO(AlonH): Make memory size configurable.
 pub const MEMORY_ID_SIZE: usize = 1;
 pub const N_MULTIPLICITY_COLUMNS: usize = 1;
-pub const BIG_N_COLUMNS: usize = N_M31_IN_FELT252 + N_MULTIPLICITY_COLUMNS;
-pub const SMALL_N_COLUMNS: usize = N_M31_IN_SMALL_FELT252 + N_MULTIPLICITY_COLUMNS;
+// Big trace columns layout:
+// [value limbs..., prev_id, curr_id, multiplicity, enabler]
+pub const BIG_N_COLUMNS: usize =
+    N_M31_IN_FELT252 + (MEMORY_ID_SIZE + MEMORY_ID_SIZE) + N_MULTIPLICITY_COLUMNS + 1;
+// Small trace columns layout:
+// [value limbs..., prev_id, curr_id, multiplicity, enabler]
+pub const SMALL_N_COLUMNS: usize =
+    N_M31_IN_SMALL_FELT252 + (MEMORY_ID_SIZE + MEMORY_ID_SIZE) + N_MULTIPLICITY_COLUMNS + 1;
 
 pub type BigComponent = FrameworkComponent<BigEval>;
 pub type SmallComponent = FrameworkComponent<SmallEval>;
@@ -91,6 +94,8 @@ pub struct BigEval {
     // Internal offset of the ids when there are multiple components.
     pub offset: u32,
     pub lookup_elements: relations::MemoryIdToBig,
+    pub id_relation: relations::Id,
+    pub range_check_19_relation: relations::RangeCheck_19,
     pub range_check_9_9_lookup_elements: relations::RangeCheck_9_9,
     pub range_check_9_9_b_lookup_elements: relations::RangeCheck_9_9_B,
     pub range_check_9_9_c_lookup_elements: relations::RangeCheck_9_9_C,
@@ -106,6 +111,8 @@ impl BigEval {
         log_n_rows: u32,
         offset: u32,
         lookup_elements: relations::MemoryIdToBig,
+        id_relation: relations::Id,
+        range_check_19_relation: relations::RangeCheck_19,
         range_check_9_9_lookup_elements: relations::RangeCheck_9_9,
         range_check_9_9_b_lookup_elements: relations::RangeCheck_9_9_B,
         range_check_9_9_c_lookup_elements: relations::RangeCheck_9_9_C,
@@ -119,6 +126,8 @@ impl BigEval {
             log_n_rows,
             offset,
             lookup_elements,
+            id_relation,
+            range_check_19_relation,
             range_check_9_9_lookup_elements,
             range_check_9_9_b_lookup_elements,
             range_check_9_9_c_lookup_elements,
@@ -141,9 +150,11 @@ impl FrameworkEval for BigEval {
     }
 
     fn evaluate<E: EvalAtRow>(&self, mut eval: E) -> E {
-        let seq = eval.get_preprocessed_column(Seq::new(self.log_size()).id());
         let value: [E::F; N_M31_IN_FELT252] = std::array::from_fn(|_| eval.next_trace_mask());
+        let prev_id = eval.next_trace_mask();
+        let curr_id = eval.next_trace_mask();
         let multiplicity = eval.next_trace_mask();
+        let enabler = eval.next_trace_mask();
 
         // Range check limbs.
         for (i, (l, r)) in value.iter().tuples().enumerate() {
@@ -196,13 +207,25 @@ impl FrameworkEval for BigEval {
         }
 
         // Yield the value.
-        let id = seq
-            + E::F::from(M31::from(LARGE_MEMORY_VALUE_ID_BASE))
-            + E::F::from(M31::from(self.offset));
         eval.add_to_relation(RelationEntry::new(
             &self.lookup_elements,
             E::EF::from(-multiplicity),
-            &chain!([id], value).collect_vec(),
+            &chain!([curr_id.clone()], value).collect_vec(),
+        ));
+        eval.add_to_relation(RelationEntry::new(
+            &self.id_relation,
+            -E::EF::from(enabler.clone()),
+            &[prev_id.clone()],
+        ));
+        eval.add_to_relation(RelationEntry::new(
+            &self.id_relation,
+            E::EF::from(enabler.clone()),
+            &[curr_id.clone()],
+        ));
+        eval.add_to_relation(RelationEntry::new(
+            &self.range_check_19_relation,
+            E::EF::one(),
+            &[curr_id - prev_id - enabler],
         ));
 
         eval.finalize_logup_in_pairs();
@@ -215,6 +238,8 @@ pub fn big_components_from_claim(
     log_sizes: &[u32],
     claimed_sums: &[SecureField],
     lookup_elements: &relations::MemoryIdToBig,
+    id_relation: &relations::Id,
+    range_check_19_relation: &relations::RangeCheck_19,
     range_check_9_9_lookup_elements: &relations::RangeCheck_9_9,
     range_check_9_9_b_lookup_elements: &relations::RangeCheck_9_9_B,
     range_check_9_9_c_lookup_elements: &relations::RangeCheck_9_9_C,
@@ -236,6 +261,8 @@ pub fn big_components_from_claim(
                 log_size,
                 offset,
                 lookup_elements.clone(),
+                id_relation.clone(),
+                range_check_19_relation.clone(),
                 range_check_9_9_lookup_elements.clone(),
                 range_check_9_9_b_lookup_elements.clone(),
                 range_check_9_9_c_lookup_elements.clone(),
@@ -255,6 +282,8 @@ pub fn big_components_from_claim(
 pub struct SmallEval {
     pub log_n_rows: u32,
     pub lookup_elements: relations::MemoryIdToBig,
+    pub id_relation: relations::Id,
+    pub range_check_19_relation: relations::RangeCheck_19,
     pub range_check_9_9_relation: relations::RangeCheck_9_9,
     pub range_check_9_9_b_relation: relations::RangeCheck_9_9_B,
     pub range_check_9_9_c_relation: relations::RangeCheck_9_9_C,
@@ -264,6 +293,8 @@ impl SmallEval {
     pub fn new(
         claim: Claim,
         lookup_elements: relations::MemoryIdToBig,
+        id_relation: relations::Id,
+        range_check_19_relation: relations::RangeCheck_19,
         range_check_9_9_relation: relations::RangeCheck_9_9,
         range_check_9_9_b_relation: relations::RangeCheck_9_9_B,
         range_check_9_9_c_relation: relations::RangeCheck_9_9_C,
@@ -272,6 +303,8 @@ impl SmallEval {
         Self {
             log_n_rows: claim.small_log_size,
             lookup_elements,
+            id_relation,
+            range_check_19_relation,
             range_check_9_9_relation,
             range_check_9_9_b_relation,
             range_check_9_9_c_relation,
@@ -289,9 +322,11 @@ impl FrameworkEval for SmallEval {
     }
 
     fn evaluate<E: EvalAtRow>(&self, mut eval: E) -> E {
-        let seq = eval.get_preprocessed_column(Seq::new(self.log_size()).id());
         let value: [E::F; N_M31_IN_SMALL_FELT252] = std::array::from_fn(|_| eval.next_trace_mask());
+        let prev_id = eval.next_trace_mask();
+        let id = eval.next_trace_mask();
         let multiplicity = eval.next_trace_mask();
+        let enabler = eval.next_trace_mask();
 
         // Range check limbs.
         for (i, (l, r)) in value.iter().tuples().enumerate() {
@@ -324,11 +359,25 @@ impl FrameworkEval for SmallEval {
         }
 
         // Yield the value.
-        let id = seq;
         eval.add_to_relation(RelationEntry::new(
             &self.lookup_elements,
             E::EF::from(-multiplicity),
-            &chain!([id], value).collect_vec(),
+            &chain!([id.clone()], value).collect_vec(),
+        ));
+        eval.add_to_relation(RelationEntry::new(
+            &self.id_relation,
+            -E::EF::from(enabler.clone()),
+            &[prev_id.clone()],
+        ));
+        eval.add_to_relation(RelationEntry::new(
+            &self.id_relation,
+            E::EF::from(enabler.clone()),
+            &[id.clone()],
+        ));
+        eval.add_to_relation(RelationEntry::new(
+            &self.range_check_19_relation,
+            E::EF::one(),
+            &[id - prev_id - enabler],
         ));
 
         eval.finalize_logup_in_pairs();
@@ -357,13 +406,13 @@ impl Claim {
             // And a yield of the value.
             vec![
                 log_size;
-                SECURE_EXTENSION_DEGREE * ((N_M31_IN_FELT252.div_ceil(2) + 1).div_ceil(2))
+                SECURE_EXTENSION_DEGREE * ((N_M31_IN_FELT252.div_ceil(2) + 4).div_ceil(2))
             ]
         });
         let small_interaction_log_sizes =
             vec![
                 self.small_log_size;
-                SECURE_EXTENSION_DEGREE * (N_M31_IN_SMALL_FELT252.div_ceil(2) + 1).div_ceil(2)
+                SECURE_EXTENSION_DEGREE * ((N_M31_IN_SMALL_FELT252.div_ceil(2) + 4).div_ceil(2))
             ];
         let interaction_log_sizes =
             chain!(big_interaction_log_sizes, small_interaction_log_sizes).collect_vec();
@@ -413,6 +462,8 @@ mod tests {
             log_n_rows: 4,
             offset: 0,
             lookup_elements: relations::MemoryIdToBig::dummy(),
+            id_relation: relations::Id::dummy(),
+            range_check_19_relation: relations::RangeCheck_19::dummy(),
             range_check_9_9_lookup_elements: relations::RangeCheck_9_9::dummy(),
             range_check_9_9_b_lookup_elements: relations::RangeCheck_9_9_B::dummy(),
             range_check_9_9_c_lookup_elements: relations::RangeCheck_9_9_C::dummy(),
@@ -425,6 +476,8 @@ mod tests {
         let small_eval = SmallEval {
             log_n_rows: 4,
             lookup_elements: relations::MemoryIdToBig::dummy(),
+            id_relation: relations::Id::dummy(),
+            range_check_19_relation: relations::RangeCheck_19::dummy(),
             range_check_9_9_relation: relations::RangeCheck_9_9::dummy(),
             range_check_9_9_b_relation: relations::RangeCheck_9_9_B::dummy(),
             range_check_9_9_c_relation: relations::RangeCheck_9_9_C::dummy(),

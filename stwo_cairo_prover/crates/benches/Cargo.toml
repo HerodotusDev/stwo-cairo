@@ -1,0 +1,18 @@
+[package]
+name = "benches"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dev-utils.workspace = true
+stwo_cairo_prover.workspace = true
+cairo-air.workspace = true
+rayon.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+stwo.workspace = true
+stwo-cairo-adapter.workspace = true
+
+[[bin]]
+name = "fib4m_shards_bench"
+path = "src/fib4m_shards_bench.rs"

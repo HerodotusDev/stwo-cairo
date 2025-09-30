@@ -1,9 +1,8 @@
+use num_traits::One;
 use serde::{Deserialize, Serialize};
 use stwo::core::channel::Channel;
-use stwo::core::fields::m31::M31;
 use stwo::core::fields::qm31::{SecureField, SECURE_EXTENSION_DEGREE};
 use stwo::core::pcs::TreeVec;
-use stwo_cairo_common::preprocessed_columns::preprocessed_trace::{PreProcessedColumn, Seq};
 use stwo_cairo_serialize::{CairoDeserialize, CairoSerialize};
 use stwo_constraint_framework::{EvalAtRow, FrameworkComponent, FrameworkEval, RelationEntry};
 
@@ -23,7 +22,7 @@ use crate::relations;
 /// ID2 = [id6, id7, id8, 0]
 /// ID3 = [id9, id10, 0, 0]
 pub const MEMORY_ADDRESS_TO_ID_SPLIT: usize = 16;
-pub const N_ID_AND_MULT_COLUMNS_PER_CHUNK: usize = 2;
+pub const N_ID_AND_MULT_COLUMNS_PER_CHUNK: usize = 5; // enabler, prev_address, curr_address, id, multiplicity
 pub const N_TRACE_COLUMNS: usize = MEMORY_ADDRESS_TO_ID_SPLIT * N_ID_AND_MULT_COLUMNS_PER_CHUNK;
 
 pub type Component = FrameworkComponent<Eval>;
@@ -33,12 +32,21 @@ pub struct Eval {
     // The log size of the component after split.
     pub log_size: u32,
     pub lookup_elements: relations::MemoryAddressToId,
+    pub address_relation: relations::Address,
+    pub range_check_19_relation: relations::RangeCheck_19,
 }
 impl Eval {
-    pub fn new(claim: Claim, lookup_elements: relations::MemoryAddressToId) -> Self {
+    pub fn new(
+        claim: Claim,
+        lookup_elements: relations::MemoryAddressToId,
+        address_relation: relations::Address,
+        range_check_19_relation: relations::RangeCheck_19,
+    ) -> Self {
         Self {
             log_size: claim.log_size,
             lookup_elements,
+            address_relation,
+            range_check_19_relation,
         }
     }
 }
@@ -54,17 +62,31 @@ impl FrameworkEval for Eval {
 
     fn evaluate<E: EvalAtRow>(&self, mut eval: E) -> E {
         // Addresses are offsetted by 1, as 0 address is reserved.
-        let seq_plus_one =
-            eval.get_preprocessed_column(Seq::new(self.log_size()).id()) + E::F::from(M31(1));
-        for i in 0..MEMORY_ADDRESS_TO_ID_SPLIT {
+        for _ in 0..MEMORY_ADDRESS_TO_ID_SPLIT {
+            let enabler = eval.next_trace_mask();
+            let prev_address = eval.next_trace_mask();
+            let curr_address = eval.next_trace_mask();
             let id = eval.next_trace_mask();
             let multiplicity = eval.next_trace_mask();
-            let address =
-                seq_plus_one.clone() + E::F::from(M31((i * (1 << self.log_size())) as u32));
             eval.add_to_relation(RelationEntry::new(
                 &self.lookup_elements,
                 E::EF::from(-multiplicity),
-                &[address, id],
+                &[curr_address.clone(), id],
+            ));
+            eval.add_to_relation(RelationEntry::new(
+                &self.address_relation,
+                -E::EF::from(enabler.clone()),
+                &[prev_address.clone()],
+            ));
+            eval.add_to_relation(RelationEntry::new(
+                &self.address_relation,
+                E::EF::from(enabler.clone()),
+                &[curr_address.clone()],
+            ));
+            eval.add_to_relation(RelationEntry::new(
+                &self.range_check_19_relation,
+                E::EF::one(),
+                &[curr_address - prev_address - enabler],
             ));
         }
 
@@ -81,7 +103,7 @@ impl Claim {
     pub fn log_sizes(&self) -> TreeVec<Vec<u32>> {
         let trace_log_sizes = vec![self.log_size; N_TRACE_COLUMNS];
         let interaction_log_sizes =
-            vec![self.log_size; SECURE_EXTENSION_DEGREE * MEMORY_ADDRESS_TO_ID_SPLIT.div_ceil(2)];
+            vec![self.log_size; SECURE_EXTENSION_DEGREE * (2 * MEMORY_ADDRESS_TO_ID_SPLIT)];
         TreeVec::new(vec![vec![], trace_log_sizes, interaction_log_sizes])
     }
 
@@ -117,6 +139,8 @@ mod tests {
         let eval = Eval {
             log_size: 4,
             lookup_elements: relations::MemoryAddressToId::dummy(),
+            address_relation: relations::Address::dummy(),
+            range_check_19_relation: relations::RangeCheck_19::dummy(),
         };
 
         let expr_eval = eval.evaluate(ExprEvaluator::new());
