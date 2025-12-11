@@ -498,6 +498,32 @@ impl CairoInteractionElements {
             verify_bitwise_xor_12: relations::VerifyBitwiseXor_12::draw(channel),
         }
     }
+
+    pub fn dummy() -> CairoInteractionElements {
+        CairoInteractionElements {
+            opcodes: relations::Opcodes::dummy(),
+            verify_instruction: relations::VerifyInstruction::dummy(),
+            blake_round: relations::BlakeRound::dummy(),
+            blake_g: relations::BlakeG::dummy(),
+            blake_sigma: relations::BlakeRoundSigma::dummy(),
+            triple_xor_32: relations::TripleXor32::dummy(),
+            poseidon_3_partial_rounds_chain: relations::Poseidon3PartialRoundsChain::dummy(),
+            poseidon_full_round_chain: relations::PoseidonFullRoundChain::dummy(),
+            cube_252: relations::Cube252::dummy(),
+            poseidon_round_keys: relations::PoseidonRoundKeys::dummy(),
+            range_check_felt_252_width_27: relations::RangeCheckFelt252Width27::dummy(),
+            partial_ec_mul: relations::PartialEcMul::dummy(),
+            pedersen_points_table: relations::PedersenPointsTable::dummy(),
+            memory_address_to_id: relations::MemoryAddressToId::dummy(),
+            memory_id_to_value: relations::MemoryIdToBig::dummy(),
+            range_checks: RangeChecksInteractionElements::dummy(),
+            verify_bitwise_xor_4: relations::VerifyBitwiseXor_4::dummy(),
+            verify_bitwise_xor_7: relations::VerifyBitwiseXor_7::dummy(),
+            verify_bitwise_xor_8: relations::VerifyBitwiseXor_8::dummy(),
+            verify_bitwise_xor_9: relations::VerifyBitwiseXor_9::dummy(),
+            verify_bitwise_xor_12: relations::VerifyBitwiseXor_12::dummy(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, CairoSerialize)]

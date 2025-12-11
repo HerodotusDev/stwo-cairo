@@ -566,13 +566,16 @@ checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 [[package]]
 name = "cairo-air"
 version = "0.1.1"
-source = "git+https://github.com/starkware-libs/stwo-cairo?rev=b160127#b160127bc60b72922ea372661b04f69e8fa589ab"
 dependencies = [
+ "clap",
  "itertools 0.12.1",
+ "log",
  "num-traits",
  "paste",
  "rayon",
  "serde",
+ "serde_json",
+ "sonic-rs",
  "starknet-curve 0.5.1",
  "starknet-ff",
  "starknet-types-core",
@@ -581,6 +584,7 @@ dependencies = [
  "stwo-cairo-serialize",
  "stwo-prover",
  "thiserror 2.0.12",
+ "tracing",
 ]
 
 [[package]]
@@ -2913,6 +2917,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "sharded-slab"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
+dependencies = [
+ "lazy_static",
+]
+
+[[package]]
 name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3139,7 +3152,6 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 [[package]]
 name = "stwo-air-utils"
 version = "0.1.1"
-source = "git+https://github.com/starkware-libs/stwo?rev=8b5436d#8b5436d807ef34db71b7f89b275d2f2ae13e883c"
 dependencies = [
  "bytemuck",
  "itertools 0.12.1",
@@ -3151,7 +3163,6 @@ dependencies = [
 [[package]]
 name = "stwo-air-utils-derive"
 version = "0.1.0"
-source = "git+https://github.com/starkware-libs/stwo?rev=8b5436d#8b5436d807ef34db71b7f89b275d2f2ae13e883c"
 dependencies = [
  "itertools 0.13.0",
  "proc-macro2",
@@ -3162,7 +3173,6 @@ dependencies = [
 [[package]]
 name = "stwo-cairo-adapter"
 version = "0.1.0"
-source = "git+https://github.com/starkware-libs/stwo-cairo?rev=b160127#b160127bc60b72922ea372661b04f69e8fa589ab"
 dependencies = [
  "bincode 2.0.1",
  "bytemuck",
@@ -3185,7 +3195,6 @@ dependencies = [
 [[package]]
 name = "stwo-cairo-common"
 version = "0.1.0"
-source = "git+https://github.com/starkware-libs/stwo-cairo?rev=b160127#b160127bc60b72922ea372661b04f69e8fa589ab"
 dependencies = [
  "bytemuck",
  "itertools 0.12.1",
@@ -3201,7 +3210,6 @@ dependencies = [
 [[package]]
 name = "stwo-cairo-serialize"
 version = "0.1.0"
-source = "git+https://github.com/starkware-libs/stwo-cairo?rev=b160127#b160127bc60b72922ea372661b04f69e8fa589ab"
 dependencies = [
  "starknet-ff",
  "stwo-cairo-serialize-derive",
@@ -3211,7 +3219,6 @@ dependencies = [
 [[package]]
 name = "stwo-cairo-serialize-derive"
 version = "0.1.0"
-source = "git+https://github.com/starkware-libs/stwo-cairo?rev=b160127#b160127bc60b72922ea372661b04f69e8fa589ab"
 dependencies = [
  "quote",
  "syn 2.0.101",
@@ -3220,7 +3227,6 @@ dependencies = [
 [[package]]
 name = "stwo-prover"
 version = "0.1.1"
-source = "git+https://github.com/starkware-libs/stwo?rev=8b5436d#8b5436d807ef34db71b7f89b275d2f2ae13e883c"
 dependencies = [
  "blake2",
  "blake3",
@@ -3238,12 +3244,12 @@ dependencies = [
  "starknet-ff",
  "thiserror 1.0.69",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
 name = "stwo_cairo_prover"
 version = "0.1.0"
-source = "git+https://github.com/starkware-libs/stwo-cairo?rev=b160127#b160127bc60b72922ea372661b04f69e8fa589ab"
 dependencies = [
  "cairo-air",
  "hex",
@@ -3350,6 +3356,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "thread_local"
+version = "1.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f60246a4944f24f6e018aa17cdeffb7818b76356965d03b07d6a9886e8962185"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "tinyvec"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3434,6 +3449,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e672c95779cf947c5311f83787af4fa8fffd12fb27e4993211a84bdfd9610f9c"
 dependencies = [
  "once_cell",
+ "valuable",
+]
+
+[[package]]
+name = "tracing-log"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
+dependencies = [
+ "log",
+ "once_cell",
+ "tracing-core",
+]
+
+[[package]]
+name = "tracing-subscriber"
+version = "0.3.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2054a14f5307d601f88daf0553e1cbf472acc4f2c51afab632431cdcd72124d5"
+dependencies = [
+ "nu-ansi-term",
+ "sharded-slab",
+ "smallvec",
+ "thread_local",
+ "tracing-core",
+ "tracing-log",
 ]
 
 [[package]]

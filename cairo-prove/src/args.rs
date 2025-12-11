@@ -33,6 +33,15 @@ pub enum Commands {
         #[arg(short, long)]
         with_pedersen: bool,
     },
+    /// Verify a proof and emit circuit data
+    CircuitData {
+        /// Path to the proof JSON file
+        #[arg(long)]
+        path: PathBuf,
+        /// Number of FRI queries
+        #[arg(long)]
+        queries: usize,
+    },
 }
 
 #[derive(Parser, Debug, Clone)]

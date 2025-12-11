@@ -1,7 +1,9 @@
 use std::path::Path;
 use std::time::Instant;
 
-use cairo_air::verifier::verify_cairo;
+use cairo_air::air::{CairoClaim, CairoComponents, CairoInteractionElements};
+use cairo_air::preprocessed::PreProcessedTrace;
+use cairo_air::verifier::{verify_cairo, verify_cairo_with_queries};
 use cairo_air::{CairoProof, PreProcessedTraceVariant};
 use cairo_lang_runner::Arg;
 use cairo_prove::args::{Cli, Commands, ProgramArguments};
@@ -9,8 +11,15 @@ use cairo_prove::execute::execute;
 use cairo_prove::prove::{prove, prover_input_from_runner};
 use clap::Parser;
 use log::{error, info};
+use serde_json::json;
+use stwo_cairo_prover::stwo_prover::constraint_framework::PREPROCESSED_TRACE_IDX;
+use stwo_cairo_prover::stwo_prover::core::air::Components as AirComponents;
+use stwo_cairo_prover::stwo_prover::core::circle::CirclePoint;
+use stwo_cairo_prover::stwo_prover::core::fields::qm31::SecureField;
+use stwo_cairo_prover::stwo_prover::core::fields::secure_column::SECURE_EXTENSION_DEGREE;
 use stwo_cairo_prover::stwo_prover::core::fri::FriConfig;
 use stwo_cairo_prover::stwo_prover::core::pcs::PcsConfig;
+use stwo_cairo_prover::stwo_prover::core::queries::Queries;
 use stwo_cairo_prover::stwo_prover::core::vcs::blake2_merkle::{
     Blake2sMerkleChannel, Blake2sMerkleHasher,
 };
@@ -24,21 +33,176 @@ fn execute_and_prove(
     let executable = serde_json::from_reader(std::fs::File::open(target_path).unwrap())
         .expect("Failed to read executable");
     let runner = execute(executable, args);
-    
+
     // Prove.
     let prover_input = prover_input_from_runner(&runner);
     prove(prover_input, pcs_config)
 }
 
-fn secure_pcs_config() -> PcsConfig {
+const COMPONENT_CONFIG_LEN: usize = 61;
+
+fn pcs_config_with_queries(n_queries: usize) -> PcsConfig {
     PcsConfig {
         pow_bits: 26,
         fri_config: FriConfig {
             log_last_layer_degree_bound: 0,
             log_blowup_factor: 1,
-            n_queries: 70,
+            n_queries,
         },
     }
+}
+
+fn secure_pcs_config() -> PcsConfig {
+    pcs_config_with_queries(70)
+}
+
+fn build_component_config(claim: &CairoClaim) -> [bool; COMPONENT_CONFIG_LEN] {
+    let mut config = [false; COMPONENT_CONFIG_LEN];
+    config[20] = true;
+    for idx in 40..COMPONENT_CONFIG_LEN {
+        config[idx] = true;
+    }
+
+    macro_rules! mark_if_non_empty {
+        ($index:expr, $collection:expr) => {
+            if !$collection.is_empty() {
+                config[$index] = true;
+            }
+        };
+    }
+
+    let opcodes = &claim.opcodes;
+    mark_if_non_empty!(0, opcodes.add);
+    mark_if_non_empty!(1, opcodes.add_small);
+    mark_if_non_empty!(2, opcodes.add_ap);
+    mark_if_non_empty!(3, opcodes.assert_eq);
+    mark_if_non_empty!(4, opcodes.assert_eq_imm);
+    mark_if_non_empty!(5, opcodes.assert_eq_double_deref);
+    mark_if_non_empty!(6, opcodes.blake);
+    mark_if_non_empty!(7, opcodes.call);
+    mark_if_non_empty!(8, opcodes.call_rel_imm);
+    mark_if_non_empty!(9, opcodes.generic);
+    mark_if_non_empty!(10, opcodes.jnz);
+    mark_if_non_empty!(11, opcodes.jnz_taken);
+    mark_if_non_empty!(12, opcodes.jump);
+    mark_if_non_empty!(13, opcodes.jump_double_deref);
+    mark_if_non_empty!(14, opcodes.jump_rel);
+    mark_if_non_empty!(15, opcodes.jump_rel_imm);
+    mark_if_non_empty!(16, opcodes.mul);
+    mark_if_non_empty!(17, opcodes.mul_small);
+    mark_if_non_empty!(18, opcodes.qm31);
+    mark_if_non_empty!(19, opcodes.ret);
+
+    if claim.blake_context.claim.is_some() {
+        config[21] = true;
+        config[22] = true;
+        config[23] = true;
+        config[24] = true;
+        config[25] = true;
+    }
+
+    let builtins = &claim.builtins;
+    if builtins.add_mod_builtin.is_some() {
+        config[26] = true;
+    }
+    if builtins.bitwise_builtin.is_some() {
+        config[27] = true;
+    }
+    if builtins.mul_mod_builtin.is_some() {
+        config[28] = true;
+    }
+    if builtins.pedersen_builtin.is_some() {
+        config[29] = true;
+    }
+    if builtins.poseidon_builtin.is_some() {
+        config[30] = true;
+    }
+    if builtins.range_check_96_builtin.is_some() {
+        config[31] = true;
+    }
+    if builtins.range_check_128_builtin.is_some() {
+        config[32] = true;
+    }
+
+    if claim.pedersen_context.claim.is_some() {
+        config[33] = true;
+        config[34] = true;
+    }
+
+    if claim.poseidon_context.claim.is_some() {
+        config[35] = true;
+        config[36] = true;
+        config[37] = true;
+        config[38] = true;
+        config[39] = true;
+    }
+
+    config
+}
+
+fn build_preprocessed_config(components: &AirComponents) -> Vec<bool> {
+    let mask_points = components.mask_points(CirclePoint::<SecureField>::zero());
+    mask_points[PREPROCESSED_TRACE_IDX]
+        .iter()
+        .map(|points| !points.is_empty())
+        .collect()
+}
+
+fn build_column_log_sizes(
+    claim: &CairoClaim,
+    preprocessed_log_sizes: &[u32],
+    components: &AirComponents,
+) -> Vec<Vec<u64>> {
+    let mut log_sizes = claim.log_sizes();
+    log_sizes[PREPROCESSED_TRACE_IDX] = preprocessed_log_sizes.to_vec();
+    let mut as_vec = log_sizes
+        .0
+        .into_iter()
+        .map(|tree| tree.into_iter().map(|log_size| log_size as u64).collect())
+        .collect::<Vec<_>>();
+    let composition_log_degree_bound = components.composition_log_degree_bound() as u64;
+    as_vec.push(vec![composition_log_degree_bound; SECURE_EXTENSION_DEGREE]);
+    as_vec
+}
+
+fn compute_shape_data(
+    proof: &CairoProof<Blake2sMerkleHasher>,
+    preprocessed_trace: &PreProcessedTrace,
+) -> (Vec<Vec<u64>>, Vec<bool>, [bool; COMPONENT_CONFIG_LEN]) {
+    let preprocessed_log_sizes = preprocessed_trace.log_sizes();
+    let preprocessed_column_ids = preprocessed_trace.ids();
+    let interaction_elements = CairoInteractionElements::dummy();
+    let cairo_components = CairoComponents::new(
+        &proof.claim,
+        &interaction_elements,
+        &proof.interaction_claim,
+        &preprocessed_column_ids,
+    );
+    let component_refs = cairo_components.components();
+    let air_components = AirComponents {
+        components: component_refs.clone(),
+        n_preprocessed_columns: preprocessed_log_sizes.len(),
+    };
+    let column_log_sizes =
+        build_column_log_sizes(&proof.claim, &preprocessed_log_sizes, &air_components);
+    let preprocessed_config = build_preprocessed_config(&air_components);
+    let component_config = build_component_config(&proof.claim);
+    (column_log_sizes, preprocessed_config, component_config)
+}
+
+fn build_deduped_queries_shape(mut queries: Queries) -> Vec<u64> {
+    let mut shape = vec![0u64; 32];
+    loop {
+        let log_size = queries.log_domain_size as usize;
+        if log_size < shape.len() {
+            shape[log_size] = queries.positions.len() as u64;
+        }
+        if log_size == 0 {
+            break;
+        }
+        queries = queries.fold(1);
+    }
+    shape
 }
 
 fn handle_prove(target: &Path, proof: &Path, args: ProgramArguments) {
@@ -74,6 +238,53 @@ fn handle_verify(proof: &Path, with_pedersen: bool) {
     }
 }
 
+fn handle_generate_circuit_data(proof_path: &Path, n_queries: usize) {
+    assert!(n_queries > 0, "number of queries must be positive");
+    info!(
+        "Verifying proof and generating circuit data from: {:?}",
+        proof_path
+    );
+    let file = std::fs::File::open(proof_path.to_str().unwrap()).unwrap();
+    let cairo_proof: CairoProof<Blake2sMerkleHasher> =
+        serde_json::from_reader(file).expect("Failed to deserialize proof");
+    let preprocessed_trace_variant = PreProcessedTraceVariant::Canonical;
+    let preprocessed_trace = preprocessed_trace_variant.to_preprocessed_trace();
+    let (column_log_sizes, preprocessed_config, component_config) =
+        compute_shape_data(&cairo_proof, &preprocessed_trace);
+
+    let pcs_config = pcs_config_with_queries(n_queries);
+    let queries = match verify_cairo_with_queries::<Blake2sMerkleChannel>(
+        cairo_proof,
+        pcs_config,
+        preprocessed_trace_variant,
+    ) {
+        Ok(queries) => queries,
+        Err(err) => {
+            error!("Verification failed: {:?}", err);
+            return;
+        }
+    };
+    let deduped_shape = build_deduped_queries_shape(queries);
+
+    let shape_file_name = proof_path
+        .file_stem()
+        .map(|stem| {
+            let mut name = stem.to_os_string();
+            name.push("_shape.json");
+            name
+        })
+        .expect("proof path must have a valid file name");
+    let shape_path = proof_path.with_file_name(shape_file_name);
+    let payload = json!({
+        "columnLogSizes": column_log_sizes,
+        "dedupedQueriesShape": deduped_shape,
+        "componentConfig": component_config.to_vec(),
+        "preprocessedConfig": preprocessed_config,
+    });
+    std::fs::write(&shape_path, serde_json::to_string_pretty(&payload).unwrap()).unwrap();
+    info!("Circuit data saved to {:?}", shape_path);
+}
+
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
@@ -92,6 +303,9 @@ fn main() {
             with_pedersen,
         } => {
             handle_verify(&proof, with_pedersen);
+        }
+        Commands::CircuitData { path, queries } => {
+            handle_generate_circuit_data(&path, queries);
         }
     }
 }

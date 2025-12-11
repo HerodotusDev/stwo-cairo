@@ -165,6 +165,25 @@ impl RangeChecksInteractionElements {
             rc_3_3_3_3_3: relations::RangeCheck_3_3_3_3_3::draw(channel),
         }
     }
+
+    pub fn dummy() -> RangeChecksInteractionElements {
+        RangeChecksInteractionElements {
+            rc_6: relations::RangeCheck_6::dummy(),
+            rc_8: relations::RangeCheck_8::dummy(),
+            rc_11: relations::RangeCheck_11::dummy(),
+            rc_12: relations::RangeCheck_12::dummy(),
+            rc_18: relations::RangeCheck_18::dummy(),
+            rc_19: relations::RangeCheck_19::dummy(),
+            rc_4_3: relations::RangeCheck_4_3::dummy(),
+            rc_4_4: relations::RangeCheck_4_4::dummy(),
+            rc_5_4: relations::RangeCheck_5_4::dummy(),
+            rc_9_9: relations::RangeCheck_9_9::dummy(),
+            rc_7_2_5: relations::RangeCheck_7_2_5::dummy(),
+            rc_3_6_6_3: relations::RangeCheck_3_6_6_3::dummy(),
+            rc_4_4_4_4: relations::RangeCheck_4_4_4_4::dummy(),
+            rc_3_3_3_3_3: relations::RangeCheck_3_3_3_3_3::dummy(),
+        }
+    }
 }
 
 pub struct RangeChecksComponents {

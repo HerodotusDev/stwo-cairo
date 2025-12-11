@@ -10,11 +10,13 @@ use stwo_cairo_adapter::HashMap;
 use stwo_cairo_common::memory::LOG_MEMORY_ADDRESS_BOUND;
 use stwo_cairo_common::prover_types::cpu::{CasmState, PRIME};
 use stwo_prover::constraint_framework::PREPROCESSED_TRACE_IDX;
+use stwo_prover::core::air::Component;
 use stwo_prover::core::channel::{Channel, MerkleChannel};
 use stwo_prover::core::fields::m31::BaseField;
 use stwo_prover::core::fields::qm31::SecureField;
 use stwo_prover::core::pcs::{CommitmentSchemeVerifier, PcsConfig};
-use stwo_prover::core::prover::{verify, VerificationError};
+use stwo_prover::core::prover::{verify, verify_with_queries, StarkProof, VerificationError};
+use stwo_prover::core::queries::Queries;
 use thiserror::Error;
 
 use crate::air::{
@@ -277,7 +279,7 @@ fn check_builtin(
 /// 1 << (24 + INTERACTION_POW_BITS) relation terms.
 pub const INTERACTION_POW_BITS: u32 = 24;
 
-pub fn verify_cairo<MC: MerkleChannel>(
+fn verify_cairo_impl<MC: MerkleChannel, F, R>(
     CairoProof {
         claim,
         interaction_pow,
@@ -286,7 +288,16 @@ pub fn verify_cairo<MC: MerkleChannel>(
     }: CairoProof<MC::H>,
     pcs_config: PcsConfig,
     preprocessed_trace: PreProcessedTraceVariant,
-) -> Result<(), CairoVerificationError> {
+    verify_fn: F,
+) -> Result<R, CairoVerificationError>
+where
+    F: FnOnce(
+        &[&dyn Component],
+        &mut MC::C,
+        &mut CommitmentSchemeVerifier<MC>,
+        StarkProof<MC::H>,
+    ) -> Result<R, VerificationError>,
+{
     // Auxiliary verifications.
     // Assert that ADDRESS->ID component does not overflow.
     assert!(
@@ -332,14 +343,59 @@ pub fn verify_cairo<MC: MerkleChannel>(
     );
     let components = component_generator.components();
 
-    // Verify stark.
-    verify(
+    verify_fn(
         &components,
         channel,
         commitment_scheme_verifier,
         stark_proof,
     )
     .map_err(CairoVerificationError::Stark)
+}
+
+pub fn verify_cairo<MC: MerkleChannel>(
+    CairoProof {
+        claim,
+        interaction_pow,
+        interaction_claim,
+        stark_proof,
+    }: CairoProof<MC::H>,
+    pcs_config: PcsConfig,
+    preprocessed_trace: PreProcessedTraceVariant,
+) -> Result<(), CairoVerificationError> {
+    verify_cairo_impl(
+        CairoProof {
+            claim,
+            interaction_pow,
+            interaction_claim,
+            stark_proof,
+        },
+        pcs_config,
+        preprocessed_trace,
+        |components,
+         channel,
+         commitment_scheme_verifier: &mut CommitmentSchemeVerifier<MC>,
+         stark_proof| {
+            verify(components, channel, commitment_scheme_verifier, stark_proof)
+        },
+    )
+}
+
+pub fn verify_cairo_with_queries<MC: MerkleChannel>(
+    proof: CairoProof<MC::H>,
+    pcs_config: PcsConfig,
+    preprocessed_trace: PreProcessedTraceVariant,
+) -> Result<Queries, CairoVerificationError> {
+    verify_cairo_impl(
+        proof,
+        pcs_config,
+        preprocessed_trace,
+        |components,
+         channel,
+         commitment_scheme_verifier: &mut CommitmentSchemeVerifier<MC>,
+         stark_proof| {
+            verify_with_queries(components, channel, commitment_scheme_verifier, stark_proof)
+        },
+    )
 }
 
 #[derive(Error, Debug)]
