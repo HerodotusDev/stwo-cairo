@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::time::Instant;
 
@@ -19,7 +20,7 @@ use stwo_cairo_prover::stwo_prover::core::fields::qm31::SecureField;
 use stwo_cairo_prover::stwo_prover::core::fields::secure_column::SECURE_EXTENSION_DEGREE;
 use stwo_cairo_prover::stwo_prover::core::fri::FriConfig;
 use stwo_cairo_prover::stwo_prover::core::pcs::PcsConfig;
-use stwo_cairo_prover::stwo_prover::core::queries::Queries;
+use stwo_cairo_prover::stwo_prover::core::queries::{Queries, QueriesWithBranching};
 use stwo_cairo_prover::stwo_prover::core::vcs::blake2_merkle::{
     Blake2sMerkleChannel, Blake2sMerkleHasher,
 };
@@ -205,6 +206,99 @@ fn build_deduped_queries_shape(mut queries: Queries) -> Vec<u64> {
     shape
 }
 
+fn build_queries_by_log_size(mut queries: Queries) -> Vec<Vec<usize>> {
+    let mut per_log = vec![Vec::new(); queries.log_domain_size as usize + 1];
+    loop {
+        let log_size = queries.log_domain_size as usize;
+        per_log[log_size] = queries.positions.clone();
+        if log_size == 0 {
+            break;
+        }
+        queries = queries.fold(1);
+    }
+    per_log
+}
+
+fn build_column_bounds(column_log_sizes: &[Vec<u64>]) -> Vec<usize> {
+    let mut set = BTreeSet::new();
+    for tree in column_log_sizes {
+        for &log_size in tree {
+            set.insert((log_size + 1) as usize);
+        }
+    }
+    let mut bounds: Vec<usize> = set.into_iter().collect();
+    bounds.sort_by(|a, b| b.cmp(a));
+    bounds
+}
+
+fn build_positions_with_pairs(
+    base_positions: &[Vec<usize>],
+    paired_layers: &BTreeSet<usize>,
+) -> Vec<Vec<usize>> {
+    let mut positions = vec![Vec::new(); base_positions.len()];
+    for log_size in 0..base_positions.len() {
+        if paired_layers.contains(&log_size) {
+            if log_size == 0 {
+                positions[log_size] = base_positions[log_size].clone();
+            } else {
+                let parents = &base_positions[log_size - 1];
+                let mut paired = Vec::with_capacity(parents.len() * 2);
+                for &parent in parents {
+                    paired.push(parent * 2);
+                    paired.push(parent * 2 + 1);
+                }
+                positions[log_size] = paired;
+            }
+        } else {
+            positions[log_size] = base_positions[log_size].clone();
+        }
+    }
+    positions
+}
+
+fn build_branching(positions_by_log_size: &[Vec<usize>]) -> Vec<Vec<u8>> {
+    if positions_by_log_size.is_empty() {
+        return Vec::new();
+    }
+    let mut branching = vec![Vec::new(); positions_by_log_size.len()];
+    for log_size in 0..positions_by_log_size.len() - 1 {
+        let children = &positions_by_log_size[log_size + 1];
+        for &parent in &positions_by_log_size[log_size] {
+            let left = parent * 2;
+            let right = left + 1;
+            let left_present = children.binary_search(&left).is_ok();
+            let right_present = children.binary_search(&right).is_ok();
+            let code = (left_present as u8) | ((right_present as u8) << 1);
+            branching[log_size].push(code);
+        }
+    }
+    branching
+}
+
+fn build_fri_inner_layer_branching(
+    base_positions: &[Vec<usize>],
+    column_bounds: &[usize],
+    n_inner_layers: usize,
+) -> Vec<Vec<Vec<u8>>> {
+    if column_bounds.is_empty() {
+        return Vec::new();
+    }
+    let mut result = Vec::with_capacity(n_inner_layers);
+    let mut log_size = column_bounds[0].saturating_sub(2);
+    for _ in 0..n_inner_layers {
+        let paired_layer = log_size + 1;
+        let mut paired_layers = BTreeSet::new();
+        paired_layers.insert(paired_layer);
+        let positions = build_positions_with_pairs(base_positions, &paired_layers);
+        result.push(build_branching(&positions));
+        if log_size == 0 {
+            break;
+        }
+        log_size -= 1;
+    }
+    result
+}
+
 fn handle_prove(target: &Path, proof: &Path, args: ProgramArguments) {
     info!("Generating proof for target: {:?}", target);
     let start = Instant::now();
@@ -251,9 +345,10 @@ fn handle_generate_circuit_data(proof_path: &Path, n_queries: usize) {
     let preprocessed_trace = preprocessed_trace_variant.to_preprocessed_trace();
     let (column_log_sizes, preprocessed_config, component_config) =
         compute_shape_data(&cairo_proof, &preprocessed_trace);
+    let inner_layers_len = cairo_proof.stark_proof.fri_proof.inner_layers.len();
 
     let pcs_config = pcs_config_with_queries(n_queries);
-    let queries = match verify_cairo_with_queries::<Blake2sMerkleChannel>(
+    let queries_with_branching = match verify_cairo_with_queries::<Blake2sMerkleChannel>(
         cairo_proof,
         pcs_config,
         preprocessed_trace_variant,
@@ -264,7 +359,19 @@ fn handle_generate_circuit_data(proof_path: &Path, n_queries: usize) {
             return;
         }
     };
-    let deduped_shape = build_deduped_queries_shape(queries);
+    let QueriesWithBranching { queries, branching } = queries_with_branching;
+    let mut queries_branching = branching;
+    let deduped_shape = build_deduped_queries_shape(queries.clone());
+    let base_queries = build_queries_by_log_size(queries);
+    let column_bounds = build_column_bounds(&column_log_sizes);
+    let paired_layers: BTreeSet<usize> = column_bounds.iter().copied().collect();
+    let first_layer_positions = build_positions_with_pairs(&base_queries, &paired_layers);
+    let fri_first_layer_branching = build_branching(&first_layer_positions);
+    let fri_inner_layer_branching =
+        build_fri_inner_layer_branching(&base_queries, &column_bounds, inner_layers_len);
+    if queries_branching.len() < deduped_shape.len() {
+        queries_branching.resize(deduped_shape.len(), Vec::new());
+    }
 
     let shape_file_name = proof_path
         .file_stem()
@@ -278,6 +385,9 @@ fn handle_generate_circuit_data(proof_path: &Path, n_queries: usize) {
     let payload = json!({
         "columnLogSizes": column_log_sizes,
         "dedupedQueriesShape": deduped_shape,
+        "queriesBranching": queries_branching,
+        "friFirstLayerBranching": fri_first_layer_branching,
+        "friInnerLayerBranching": fri_inner_layer_branching,
         "componentConfig": component_config.to_vec(),
         "preprocessedConfig": preprocessed_config,
     });

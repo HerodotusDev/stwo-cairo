@@ -15,8 +15,10 @@ use stwo_prover::core::channel::{Channel, MerkleChannel};
 use stwo_prover::core::fields::m31::BaseField;
 use stwo_prover::core::fields::qm31::SecureField;
 use stwo_prover::core::pcs::{CommitmentSchemeVerifier, PcsConfig};
-use stwo_prover::core::prover::{verify, verify_with_queries, StarkProof, VerificationError};
-use stwo_prover::core::queries::Queries;
+use stwo_prover::core::prover::{
+    verify, verify_with_queries, StarkProof, VerificationError,
+};
+use stwo_prover::core::queries::QueriesWithBranching;
 use thiserror::Error;
 
 use crate::air::{
@@ -384,7 +386,7 @@ pub fn verify_cairo_with_queries<MC: MerkleChannel>(
     proof: CairoProof<MC::H>,
     pcs_config: PcsConfig,
     preprocessed_trace: PreProcessedTraceVariant,
-) -> Result<Queries, CairoVerificationError> {
+) -> Result<QueriesWithBranching, CairoVerificationError> {
     verify_cairo_impl(
         proof,
         pcs_config,
